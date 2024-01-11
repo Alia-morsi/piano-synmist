@@ -1,6 +1,7 @@
 
 import partitura as pt
 import numpy as np
+import pandas as pd
 import numpy.lib.recfunctions as rfn
 import copy
 from region_classifier import RegionClassifier
@@ -22,62 +23,243 @@ class Mistaker():
         rc = RegionClassifier(performance_path, save=False)
 
         self.na = rc.na     # note array with region classification
+        self.white_keys, self.black_keys = self.black_white_keys()
 
-        self.forward_backward_insertion(self.na[self.na['id'] == 'n17'])
+        self.sampling_prob = pd.read_csv("sampling_prob.csv", index_col='index')
+        self.mistake_scheduler()
 
-        # pt.save_performance_midi(self.performance, performance_path[:-4] + "_mk.mid")
-        # hook()
+        # self.forward_backward_insertion(self.na[self.na['id'] == 'n17'])
+
+        pt.save_performance_midi(self.performance, performance_path[:-4] + "_mk.mid")
+        hook()
 
 
-    def paint_velocity(self, velocity_map):
-        """paint the velocity of the notes in piece, according to the dict that maps 
-            column attribute to a specific velocity.  
+    def black_white_keys(self):
+        white_keys_all_octaves = []
+        black_keys_all_octaves = []
 
-            Note that you want to prioritize the keys in the velocity map (from low to high), 
-                as the former ones will be overwritten by later ones.
+        for octave in range(0, 11):  # MIDI octaves range from 0 to 10
+            # The MIDI number for C0 is 12. Each octave adds 12 to this base.
+            base_midi_number = 12 + octave * 12
 
-            velocity_map: {"is_double_note": 64, "is_scale_note": 127,} 
+            # White keys are all the natural notes (C, D, E, F, G, A, B)
+            white_keys = [base_midi_number, base_midi_number + 2, base_midi_number + 4,
+                        base_midi_number + 5, base_midi_number + 7, base_midi_number + 9,
+                        base_midi_number + 11]
+
+            # Black keys are all the sharps/flats
+            black_keys = [base_midi_number + 1, base_midi_number + 3, base_midi_number + 6,
+                        base_midi_number + 8, base_midi_number + 10]
+
+            white_keys_all_octaves.extend(white_keys)
+            black_keys_all_octaves.extend(black_keys)
+
+        return white_keys_all_octaves, black_keys_all_octaves
+
+
+    ########### Function for scheduling mistakes #################
+    def mistake_scheduler(self, n_mistakes={
+                "forward_backward_insertion": 5,
+                "mistouch": 5,
+                "pitch_change": 5,
+                "drag": 5
+            }):
+        """Based on heuristics and classified regions, add mistake on the  
+        
+            n_mistakes: the number of mistakes to add for each group. 
         """
 
-        for note in self.performance.performedparts[0].notes:
-            note['velocity'] = 1
+        # for each type of mistake, we add 
+        for mistake_type, n in n_mistakes.items():
+            counter = 0
+            while n:
+                # generate the mistakes around the regions that's probable.
+                for texture_group, prob in self.sampling_prob[mistake_type].items():
+                    if np.random.rand() < prob:  # Randomly decide to sample from this group
+                        note = self.sample_group(self.na, texture_group)
+                        if mistake_type == 'forward_backward_insertion':
+                            # TODO: get the ascending parameter.
+                            try:
+                                self.forward_backward_insertion(note, forward=(np.random.random() > 0.5), marking=True)
+                            except Exception as e:
+                                print(e)
+                            counter += 1
+                        if mistake_type == 'mistouch':
+                            self.mistouch(note, marking=True)
+                        if mistake_type == 'pitch_change':
+                            self.pitch_change(note, marking=True)
+                        if mistake_type == 'drag':
+                            self.drag(note, marking=True)
+                        n -= 1
+                        break
+                if counter > 5:
+                    hook()
 
-            note_in_na = self.na[self.na['id'] == note['id']]
+        return
 
-            for key in velocity_map.keys():
-                if note_in_na[key]:
-                    note['velocity'] = velocity_map[key]
+    def sample_group(self, data, group):
+        mask = data[group] == 1
+        group_data = data[mask]
+        return group_data[np.random.choice(len(group_data), 1, replace=True)]
 
-        return 
 
     ########### Functions for adding various mistakes ############
 
-    def forward_backward_insertion(self, note, forward=True):
+    def forward_backward_insertion(self, note, forward=True, ascending=True, marking=False):
         """insert notes that belongs to the previous / later onset
-
     
+        note: The note that we would like to have mistake inserted around. 
+        forward: look for future or past neighbor to double.
+        ascending: when having multiple candidates, whether to insert note with higher pitch. 
+        marking: whether to mark the inserted error with a bottom note.
         """
 
-        # forward: search for the nearest previous neighbor and double it
+        # forward: search for the nearest future (forward) neighbor and double it
         if forward:
-            insert_pitch = self.na[self.na['offset_sec'] <= note['onset_sec']][-1]
+            insert_pitches = self.na[self.na['onset_sec'] > note['offset_sec']]
+            min_onset = insert_pitches['onset_sec'].min()
+            insert_pitches = insert_pitches[np.isclose(insert_pitches['onset_sec'], min_onset, atol=0.05)]
+        else: # backward (past neighbor)
+            insert_pitches = self.na[self.na['offset_sec'] < note['onset_sec']]
+            max_onset = insert_pitches['onset_sec'].max()
+            insert_pitches = insert_pitches[np.isclose(insert_pitches['onset_sec'], max_onset, atol=0.05)]
+
+        if (ascending and forward) or ((not ascending) and (not forward)): # insert a pitch that's higher
+            insert_pitches_ = insert_pitches[insert_pitches['pitch'] > note['pitch']]
+        else:
+            insert_pitches_ = insert_pitches[insert_pitches['pitch'] < note['pitch']]
+
+        if not len(insert_pitches_):
+            insert_pitches_ = insert_pitches
+        insert_pitch = np.random.choice(insert_pitches_)
 
         notes_cpy = copy.deepcopy(self.performance.performedparts[0].notes)
         for nn in self.performance.performedparts[0].notes:
             if nn['id'] == note['id']:
                 nn_cpy = copy.deepcopy(nn)
-                nn_cpy['pitch'] = insert_pitch['pitch']
-                nn_cpy['note_on'] = nn['note_on'] + np.random.random() * 0.05
-                nn_cpy['velocity'] = int(np.random.random() * nn['velocity'])
+                nn_cpy['midi_pitch'] = insert_pitch['pitch']
+                nn_cpy['note_on'] = nn['note_on'] + (np.random.random() - 0.5) * 0.05 # 50ms of wiggle space in onset
+                nn_cpy['note_off'] = nn['note_off'] + (np.random.random() - 0.5) * 0.05 
+                nn_cpy['velocity'] = int(((np.random.random() * 0.5) + 0.5) * nn['velocity']) # randomly decrease the volume of the inserted note (but not less than half).
+
                 notes_cpy.append(nn_cpy)
-                hook()
-            
+                if marking:
+                    marking_note = copy.deepcopy(nn_cpy)
+                    marking_note['midi_pitch'] = 3
+                    marking_note['velocity'] = 120
+                    notes_cpy.append(marking_note)
+        
+        self.performance.performedparts[0].notes = notes_cpy
+        print(f"added forward={forward} insertion at note {note['id']} with pitch {insert_pitch['pitch']}.")
 
 
-        return 
+    def mistouch(self, note, marking=False):
+        """add mistouched inserted note for the given note."""
 
+        # white keys can't touch black keys
+        if note['pitch'] in self.white_keys: 
+            insert_pitch = self.white_keys[self.white_keys.index(note['pitch']) + (np.random.choice([1, -1]))]
+            assert(insert_pitch != note['pitch'])
+            hook()
+        else:
+            insert_pitch = note['pitch'] + (np.random.choice([1, -1]))
+
+        notes_cpy = copy.deepcopy(self.performance.performedparts[0].notes)
+        for nn in self.performance.performedparts[0].notes:
+            if nn['id'] == note['id']:
+                nn_cpy = copy.deepcopy(nn)
+                nn_cpy['midi_pitch'] = insert_pitch
+                nn_cpy['note_on'] = nn['note_on'] + (np.random.random() - 0.5) * 0.05 # 50ms of wiggle space in onset
+                nn_cpy['note_off'] = nn['note_off'] + (np.random.random() - 0.5) * 0.05 
+                nn_cpy['velocity'] = int(((np.random.random() * 0.5) + 0.5) * nn['velocity']) # randomly decrease the volume of the inserted note (but not less than half).
+
+                notes_cpy.append(nn_cpy)
+                if marking:
+                    marking_note = copy.deepcopy(nn_cpy)
+                    marking_note['midi_pitch'] = 3
+                    marking_note['velocity'] = 100
+                    notes_cpy.append(marking_note)
+        
+        self.performance.performedparts[0].notes = notes_cpy
+        print(f"added mistouch insertion at note {note['id']} with pitch {insert_pitch}.")
+
+    
+
+    def pitch_change(self, note, correct=False, change_chordblock=False, marking=False):
+        """change the pitch of the given note.
+
+        the changed pitch can be either: the pitch-wise nearest neighboring note, or random 1/2 semitones around
+        (TODO)change_chordblock: if True, all notes within that block would change into adjacent chord. 
+        (TODO)correct: if correct, the error is combined with a drag and and then correct pitch
+        """
+        notes_cpy = copy.deepcopy(self.performance.performedparts[0].notes)
+        for nn in notes_cpy:
+            if nn['id'] == note['id']:
+                marking_note = copy.deepcopy(nn) 
+
+                if np.random.random() > 0.5:
+                    neighbor_pitches = self.na[self.na['offset_sec'] < note['onset_sec']]
+                    max_onset = neighbor_pitches['onset_sec'].max()
+                    neighbor_pitches = neighbor_pitches[np.isclose(neighbor_pitches['onset_sec'], max_onset, atol=0.05)]
+                    near_neighbor = neighbor_pitches[np.abs(neighbor_pitches['pitch'] - note['pitch']).argmin()]
+                    changed_pitch = near_neighbor['pitch']
+                else:
+                    changed_pitch = nn['midi_pitch'] + np.random.choice([-2, -1, 1, 2])
+                nn['midi_pitch'] = changed_pitch
+
+
+        if marking:
+            marking_note['midi_pitch'] = 3
+            marking_note['velocity'] = 90
+            notes_cpy.append(marking_note)
+        
+        self.performance.performedparts[0].notes = notes_cpy
+        print(f"added pitch change at note {note['id']} with pitch {changed_pitch}.")
+
+
+    ########### Functions for rhythm mistakes ####################
+
+
+    def drag(self, note, marking=False):
+        """a drag / hesitation on the note position 
+        
+        details: 1. after the drag, restarted passages will be slower
+            2. the restarted passages also come with lower volume. 
+        
+        """
+
+        # dragging can happen at most 1 - 3 times the duration of the note
+        drag_time = ((np.random.random() * 2) + 1) * note['duration_sec']
+
+        for nn in self.performance.performedparts[0].notes:
+            if nn['id'] == note['id']:
+                marking_note = copy.deepcopy(nn)
+
+            # drag the offset of given note. 
+            if np.isclose(nn['note_on'], note['onset_sec'], atol=0.05):
+                nn['note_off'] += drag_time * np.random.random()
+
+            # shift forward all later notes by the drag time 
+            if (nn['note_on'] - note['onset_sec']) > 0.05:
+                # for the neighboring notes, slow down their tempo and decrease volume
+                if (nn['note_on'] - note['onset_sec']) < note['duration_sec'] * 3:
+                    nn['note_on'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
+                    nn['note_off'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
+                    nn['velocity'] = int(((np.random.random() * 0.3) + 0.7) * nn['velocity'])
+                else:
+                    nn['note_on'] += drag_time
+                    nn['note_off'] += drag_time
+
+        notes_cpy = copy.deepcopy(self.performance.performedparts[0].notes)
+        if marking:
+            marking_note['midi_pitch'] = 3
+            marking_note['velocity'] = 1
+            notes_cpy.append(marking_note)
+
+        self.performance.performedparts[0].notes = notes_cpy
+        print(f"added rhythm drag at note {note['id']}.")
 
 
 if __name__ == '__main__':
 
-    mk = Mistaker("/Users/huanzhang/01Acdemics/PhD/Research/Datasets/Burgmuller/b-04-annot.mid", burgmuller=True)
+    mk = Mistaker("/Users/huanzhang/01Acdemics/PhD/Research/Datasets/Burgmuller/b-02-annot.mid", burgmuller=True)

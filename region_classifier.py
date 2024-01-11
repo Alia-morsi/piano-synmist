@@ -34,6 +34,9 @@ class RegionClassifier():
         self.scale_note_detection()
         self.block_chords_note_detection()
 
+        self.na = rfn.append_fields(self.na, 'others', [
+            (self.na[i]['is_double_note'] or self.na[i]['is_scale_note'] or self.na[i]['is_block_chords_note']) for i in range(len(self.na))], usemask=False)
+
         self.paint_velocity({
             "is_double_note": 64,
             "is_scale_note": 92,
@@ -113,6 +116,9 @@ class RegionClassifier():
         self.na = rfn.append_fields(self.na, 'is_block_chords_note', [int(l >= 2) for l in neighbors_len], usemask=False)
 
         return 
+
+    def arpeggios_detection():
+        return
 
 
     def onset_neighbor_num(self, note, diameter=5, threshold=0.05):
