@@ -177,8 +177,8 @@ def diff_ms(src_snipt_obj, tgt_snipt_obj):
     #on the return value based on this ordering will carry fwd till the end of the function.
     lcseq = pylcs.lcs_sequence_idx(tgt_tlobj.get_char_seq(), src_tlobj.get_char_seq())
     #to print the lcseq in terms of the target string
-    print('\n')
-    print(''.join([src_tlobj.charseq[i] if i != -1 else ' ' for i in lcseq]))
+    #print('\n')
+    #print(''.join([src_tlobj.charseq[i] if i != -1 else ' ' for i in lcseq]))
 
     #construct the events that happen in sequence.
     #make a list of:
@@ -188,7 +188,10 @@ def diff_ms(src_snipt_obj, tgt_snipt_obj):
     #in case a note doesn't exist from the source or the target, None will be placed instead.
     src_ctr = 0         #I think the indexes are from 0. 
     all_noteobjs = []
-    tgt_tl_beats = np.full(len(tgt_snipt_obj.timeline), -1) #Predicted performance beattimes only for the aligned portions
+    tgt_tl_beats = np.full(len(tgt_snipt_obj.timeline), -1.0) #Predicted performance beattimes only for the aligned portions
+    nb_tgt_wndw = np.array([]) #used for postprocessing the nb predictions
+    first_aligned = False #flag for initialization
+    seen = set()
 
     for tgt_ctr, res in enumerate(lcseq):
         while(res > src_ctr): #some notes in source missing, put them all.
@@ -205,32 +208,61 @@ def diff_ms(src_snipt_obj, tgt_snipt_obj):
             all_noteobjs.append((ALIGNED, (src_noteobj, src_ctr), (tgt_noteobj, tgt_ctr)))
             
             src_beat_change_idx = np.where(src_tlobj.tl_beats[:-1] != src_tlobj.tl_beats[1:])[0]  # index at which the source 'nearest beat' changes
-            nb_src = src_tlobj.tl_beats[src_ctr]
+            nb_src = src_tlobj.tl_beats[src_ctr] #the setting of this already handles the starting cases.
             n_src = src_noteobj.start
             n_tgt = tgt_noteobj.start
+
+            nb_tgt_set = False #flag to keep track if it's been set already
+
+            if not first_aligned: #init
+                first_aligned = True
+                pre_nb_src = nb_src
+                #this kindof handles this old condition
+                #if src_ctr - 1 < 0:
+                #pre_nb_src = src_noteobj.tl_beats[0]
+                pre_nb_tgt = nb_tgt = n_tgt
+                nb_tgt_set = True
 
             #if the source note is on its nearest beat within thresh, consider it on the beat
             #Which might not be the case because the note was played a bit later than it should have beatwise.
             #But this is actually a big question for such cases: where is the beat when there are temporal mistakes
-            if abs(nb_src - src_noteobj.start)*100 <= BEAT_THRESH:
-                nb_tgt = n_tgt
-            else:
-                if src_ctr - 1 < 0:
-                    pre_nb_src = src_noteobj.tl_beats[0]
-                else:
-                    x = src_beat_change_idx - (src_ctr-1)
-                    pre_nb_src_idx= np.fabs(np.piecewise(x, [x<=0, x>0], [lambda x: x, sys.maxsize])).argmin()
-                    pre_nb_src = src_tlobj.tl_beats[pre_nb_src_idx]
-                    
-                    #since beattimes are increasing, getting the max value in tgt_tl_beats[0:tgt_ctr] is enough 
-                    #(excluding tgt_ctr since we are interested in tgt_ctr-1)
-                    #if we find one, use it, if not, use the start of the snippet time
-                    pre_nb_tgt = tgt_tl_beats[0:tgt_ctr].max()
-                    if pre_nb_tgt == -1:
-                        pre_nb_tgt = n_tgt
+            #In hindsight this makes no sense because if it's not exactly on the beat in the src, then it's not
+            #Only the performance should be afforded this 'beat threshold' thing.
+            #if abs(nb_src - src_noteobj.start)*1000.0 <= BEAT_THRESH:
                 
+            #if it's beat transition for source. 
+            if src_ctr in src_beat_change_idx and src_noteobj.start not in seen:
+                seen.add(src_noteobj.start)
+                if nb_src - src_noteobj.start == 0: #or, if src note is on the beat
+                    nb_tgt = n_tgt
+                    nb_tgt_set = True
+                pre_nb_tgt = nb_tgt if tgt_ctr == 0 else tgt_tl_beats[:tgt_ctr-1].max()
+                #if src_ctr not in beat changes and src_ctr > 0, then don't update pre_nb_tgt
+            if not nb_tgt_set: 
+                #get the beat b4 the nearest beat at source
+                x = src_beat_change_idx - (src_ctr-1)
+                pre_nb_src_idx= src_beat_change_idx[np.fabs(np.piecewise(x, [x<=0, x>0], [lambda x: x, sys.maxsize])).argmin()]
+                pre_nb_src = src_tlobj.tl_beats[pre_nb_src_idx]
+
+                #get the beat b4 the nearest beat for tgt
+                #if we find one, use it, if not, use the start of the snippet time
                 nb_tgt = predict_perf_beattimes(nb_src, pre_nb_src, pre_nb_tgt, n_src, n_tgt)
+                print('nb src {}, pre_nb src {}, pre_nb_target {}, n_src {}, n_tgt {}'.format(nb_src, pre_nb_src, pre_nb_tgt, n_src, n_tgt))
+                print('nb_tgt: {}'.format(nb_tgt))
+                #print('src_ctr {}, tgt_ctr {}'.format(src_ctr, tgt_ctr))
+            #try both options:
+            #if the nearest beat is within a small difference from the one before (thresh), then make the moving average
+            #I would predict that a temporal mistake would shift that beat outside of the threshold.
+            #this is also a questionable condition under the assumption of alignment
+            #... but we also shouldn't keep averaging till the next beat, because what if there is a big 
+            #temporal variation.. need examples..
                 
+            #if abs(tgt_tl_beats[tgt_ctr-1] - nb_tgt)*1000 < BEAT_THRESH:
+                #np.append(nb_tgt_wndw, nb_tgt)
+                #tgt_tl_beats[tgt_ctr+1 - len(nb_tgt_wndw): tgt_ctr+1] = np.average(nb_tgt_wndw)
+            #else:
+                #tgt_tl_beats[tgt_ctr] = nb_tgt
+                #nb_tgt_wndw = np.array([nb_tgt])
             tgt_tl_beats[tgt_ctr] = nb_tgt
             src_ctr += 1
 
@@ -398,8 +430,6 @@ def main():
     tgt_snippet = snippet(perf_start, perf_end, perf_path)
 
     patch = diff_ms(src_snippet, tgt_snippet)
-
-    
 
 def __main__():
     #Pending Todo.
