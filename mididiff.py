@@ -153,6 +153,7 @@ def predict_perf_beattimes(nb_src, pre_alignedn_src, pre_alignedn_tgt, n_src, n_
     #target_note: n_tgt
     return n_tgt - ((n_src - nb_src)*(n_tgt - pre_alignedn_tgt)/(n_src-pre_alignedn_src))
 
+
 def diff_ms(src_snipt_obj, tgt_snipt_obj):
     if len(src_snipt_obj.timeline) == 0 or len(tgt_snipt_obj.timeline) == 0:
         print('cannot msdiff on empty timelines')
@@ -247,9 +248,7 @@ def diff_ms(src_snipt_obj, tgt_snipt_obj):
                 #get the beat b4 the nearest beat for tgt
                 #if we find one, use it, if not, use the start of the snippet time
                 nb_tgt = predict_perf_beattimes(nb_src, pre_nb_src, pre_nb_tgt, n_src, n_tgt)
-                print('nb src {}, pre_nb src {}, pre_nb_target {}, n_src {}, n_tgt {}'.format(nb_src, pre_nb_src, pre_nb_tgt, n_src, n_tgt))
-                print('nb_tgt: {}'.format(nb_tgt))
-                #print('src_ctr {}, tgt_ctr {}'.format(src_ctr, tgt_ctr))
+
             #try both options:
             #if the nearest beat is within a small difference from the one before (thresh), then make the moving average
             #I would predict that a temporal mistake would shift that beat outside of the threshold.
