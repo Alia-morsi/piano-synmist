@@ -35,13 +35,12 @@ class RegionClassifier():
         self.block_chords_note_detection()
 
         self.na = rfn.append_fields(self.na, 'others', [
-            (self.na[i]['is_double_note'] or self.na[i]['is_scale_note'] or self.na[i]['is_block_chords_note']) for i in range(len(self.na))], usemask=False)
+            int(not (self.na[i]['is_double_note'] or self.na[i]['is_scale_note'] or self.na[i]['is_block_chords_note'])) for i in range(len(self.na))], usemask=False)
 
         self.paint_velocity({
             "is_double_note": 64,
             "is_scale_note": 92,
             "is_block_chords_note": 127,
-
         })
 
         if save:

@@ -18,6 +18,7 @@ class Mistaker():
             performance_path (str): 
         """
 
+        self.performance_path = performance_path
         self.performance = pt.load_performance(performance_path)
 
         rc = RegionClassifier(performance_path, save=False)
@@ -31,7 +32,6 @@ class Mistaker():
         # self.forward_backward_insertion(self.na[self.na['id'] == 'n17'])
 
         pt.save_performance_midi(self.performance, performance_path[:-4] + "_mk.mid")
-        hook()
 
 
     def black_white_keys(self):
@@ -59,10 +59,10 @@ class Mistaker():
 
     ########### Function for scheduling mistakes #################
     def mistake_scheduler(self, n_mistakes={
-                "forward_backward_insertion": 5,
-                "mistouch": 5,
-                "pitch_change": 5,
-                "drag": 5
+                "forward_backward_insertion": 10,
+                "mistouch": 10,
+                "pitch_change": 10,
+                "drag": 10
             }):
         """Based on heuristics and classified regions, add mistake on the  
         
@@ -72,27 +72,35 @@ class Mistaker():
         # for each type of mistake, we add 
         for mistake_type, n in n_mistakes.items():
             counter = 0
+            # turn the predefined probablity into an array to decide with texture region is chosen.
+            sample_array = [[texture_group] * int(p * 10) for texture_group, p in self.sampling_prob[mistake_type].items()]
+            sample_array = [y for x in sample_array for y in x] 
+
             while n:
                 # generate the mistakes around the regions that's probable.
-                for texture_group, prob in self.sampling_prob[mistake_type].items():
-                    if np.random.rand() < prob:  # Randomly decide to sample from this group
-                        note = self.sample_group(self.na, texture_group)
-                        if mistake_type == 'forward_backward_insertion':
-                            # TODO: get the ascending parameter.
-                            try:
-                                self.forward_backward_insertion(note, forward=(np.random.random() > 0.5), marking=True)
-                            except Exception as e:
-                                print(e)
-                            counter += 1
-                        if mistake_type == 'mistouch':
-                            self.mistouch(note, marking=True)
-                        if mistake_type == 'pitch_change':
-                            self.pitch_change(note, marking=True)
-                        if mistake_type == 'drag':
-                            self.drag(note, marking=True)
-                        n -= 1
-                        break
-                if counter > 5:
+                prob = np.random.random()
+                texture_group = sample_array[int(prob * len(sample_array))]
+                note = self.sample_group(self.na, texture_group)
+
+                if not len(note): # no note in this texture group. Remove this group from the sample_array so don't sample a next time.
+                    sample_array = list(filter(lambda a: a != texture_group, sample_array))
+                    continue
+
+                if mistake_type == 'forward_backward_insertion':
+                    # TODO: get the ascending parameter.
+                    try:
+                        self.forward_backward_insertion(note, forward=(np.random.random() > 0.5), marking=True)
+                    except Exception as e:
+                        print(e)
+                    counter += 1
+                if mistake_type == 'mistouch':
+                    self.mistouch(note, marking=True)
+                if mistake_type == 'pitch_change':
+                    self.pitch_change(note, marking=True)
+                if mistake_type == 'drag':
+                    self.drag(note, marking=True)
+                n -= 1
+                if counter > 10:
                     hook()
 
         return
@@ -100,6 +108,9 @@ class Mistaker():
     def sample_group(self, data, group):
         mask = data[group] == 1
         group_data = data[mask]
+        if len(group_data) == 0:
+            print(f"no data in group {group}.")
+            return group_data
         return group_data[np.random.choice(len(group_data), 1, replace=True)]
 
 
@@ -137,7 +148,7 @@ class Mistaker():
         for nn in self.performance.performedparts[0].notes:
             if nn['id'] == note['id']:
                 nn_cpy = copy.deepcopy(nn)
-                nn_cpy['midi_pitch'] = insert_pitch['pitch']
+                nn_cpy['midi_pitch'] = int(insert_pitch['pitch'])
                 nn_cpy['note_on'] = nn['note_on'] + (np.random.random() - 0.5) * 0.05 # 50ms of wiggle space in onset
                 nn_cpy['note_off'] = nn['note_off'] + (np.random.random() - 0.5) * 0.05 
                 nn_cpy['velocity'] = int(((np.random.random() * 0.5) + 0.5) * nn['velocity']) # randomly decrease the volume of the inserted note (but not less than half).
@@ -160,7 +171,6 @@ class Mistaker():
         if note['pitch'] in self.white_keys: 
             insert_pitch = self.white_keys[self.white_keys.index(note['pitch']) + (np.random.choice([1, -1]))]
             assert(insert_pitch != note['pitch'])
-            hook()
         else:
             insert_pitch = note['pitch'] + (np.random.choice([1, -1]))
 
@@ -168,7 +178,7 @@ class Mistaker():
         for nn in self.performance.performedparts[0].notes:
             if nn['id'] == note['id']:
                 nn_cpy = copy.deepcopy(nn)
-                nn_cpy['midi_pitch'] = insert_pitch
+                nn_cpy['midi_pitch'] = int(insert_pitch)
                 nn_cpy['note_on'] = nn['note_on'] + (np.random.random() - 0.5) * 0.05 # 50ms of wiggle space in onset
                 nn_cpy['note_off'] = nn['note_off'] + (np.random.random() - 0.5) * 0.05 
                 nn_cpy['velocity'] = int(((np.random.random() * 0.5) + 0.5) * nn['velocity']) # randomly decrease the volume of the inserted note (but not less than half).
@@ -185,36 +195,37 @@ class Mistaker():
 
     
 
-    def pitch_change(self, note, correct=False, change_chordblock=False, marking=False):
+    def pitch_change(self, note, rollback=False, change_chordblock=False, marking=False):
         """change the pitch of the given note.
 
         the changed pitch can be either: the pitch-wise nearest neighboring note, or random 1/2 semitones around
         (TODO)change_chordblock: if True, all notes within that block would change into adjacent chord. 
-        (TODO)correct: if correct, the error is combined with a drag and and then correct pitch
+        (TODO)rollback: if rollback, the error is combined with a drag and and then correct pitch
         """
         notes_cpy = copy.deepcopy(self.performance.performedparts[0].notes)
         for nn in notes_cpy:
-            if nn['id'] == note['id']:
+            if nn['id'] == note['id'] and nn['midi_pitch'] == note['pitch']:
                 marking_note = copy.deepcopy(nn) 
-
+                changed_pitch = nn['midi_pitch']
                 if np.random.random() > 0.5:
                     neighbor_pitches = self.na[self.na['offset_sec'] < note['onset_sec']]
-                    max_onset = neighbor_pitches['onset_sec'].max()
-                    neighbor_pitches = neighbor_pitches[np.isclose(neighbor_pitches['onset_sec'], max_onset, atol=0.05)]
-                    near_neighbor = neighbor_pitches[np.abs(neighbor_pitches['pitch'] - note['pitch']).argmin()]
-                    changed_pitch = near_neighbor['pitch']
+                    if len(neighbor_pitches):
+                        max_onset = neighbor_pitches['onset_sec'].max()
+                        neighbor_pitches = neighbor_pitches[np.isclose(neighbor_pitches['onset_sec'], max_onset, atol=0.05)]
+                        near_neighbor = neighbor_pitches[np.abs(neighbor_pitches['pitch'] - note['pitch']).argmin()]
+                        changed_pitch = near_neighbor['pitch']
                 else:
                     changed_pitch = nn['midi_pitch'] + np.random.choice([-2, -1, 1, 2])
-                nn['midi_pitch'] = changed_pitch
+                nn['midi_pitch'] = int(changed_pitch)
 
 
-        if marking:
-            marking_note['midi_pitch'] = 3
-            marking_note['velocity'] = 90
-            notes_cpy.append(marking_note)
-        
-        self.performance.performedparts[0].notes = notes_cpy
-        print(f"added pitch change at note {note['id']} with pitch {changed_pitch}.")
+                if marking:
+                    marking_note['midi_pitch'] = 3
+                    marking_note['velocity'] = 90
+                    notes_cpy.append(marking_note)
+
+                self.performance.performedparts[0].notes = notes_cpy
+                print(f"added pitch change at note {note['id']} with pitch {changed_pitch}.")
 
 
     ########### Functions for rhythm mistakes ####################
@@ -262,4 +273,9 @@ class Mistaker():
 
 if __name__ == '__main__':
 
-    mk = Mistaker("/Users/huanzhang/01Acdemics/PhD/Research/Datasets/Burgmuller/b-02-annot.mid", burgmuller=True)
+
+    import glob
+    for path in glob.glob("/Users/huanzhang/01Acdemics/PhD/Research/SynthMistakes/data_processing/burgmuller/*[!k].mid"):
+        mk = Mistaker(path)
+
+    # mk = Mistaker("/Users/huanzhang/01Acdemics/PhD/Research/Datasets/Burgmuller/b-02-annot.mid", burgmuller=True)
