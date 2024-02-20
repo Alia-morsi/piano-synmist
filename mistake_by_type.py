@@ -81,6 +81,7 @@ class Mistaker():
                 prob = np.random.random()
                 texture_group = sample_array[int(prob * len(sample_array))]
                 note = self.sample_group(self.na, texture_group)
+                # change: sort the mistake decisions and then apply them sequentially.
 
                 if not len(note): # no note in this texture group. Remove this group from the sample_array so don't sample a next time.
                     sample_array = list(filter(lambda a: a != texture_group, sample_array))
@@ -92,16 +93,12 @@ class Mistaker():
                         self.forward_backward_insertion(note, forward=(np.random.random() > 0.5), marking=True)
                     except Exception as e:
                         print(e)
-                    counter += 1
                 if mistake_type == 'mistouch':
                     self.mistouch(note, marking=True)
                 if mistake_type == 'pitch_change':
                     self.pitch_change(note, marking=True)
                 if mistake_type == 'drag':
                     self.drag(note, marking=True)
-                n -= 1
-                if counter > 10:
-                    hook()
 
         return
 
@@ -152,9 +149,10 @@ class Mistaker():
                 nn_cpy['note_on'] = nn['note_on'] + (np.random.random() - 0.5) * 0.05 # 50ms of wiggle space in onset
                 nn_cpy['note_off'] = nn['note_off'] + (np.random.random() - 0.5) * 0.05 
                 nn_cpy['velocity'] = int(((np.random.random() * 0.5) + 0.5) * nn['velocity']) # randomly decrease the volume of the inserted note (but not less than half).
+                # TODO: fix the id of the copied note
 
                 notes_cpy.append(nn_cpy)
-                if marking:
+                if marking: # change the logic of annoation
                     marking_note = copy.deepcopy(nn_cpy)
                     marking_note['midi_pitch'] = 3
                     marking_note['velocity'] = 120
