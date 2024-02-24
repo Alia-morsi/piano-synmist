@@ -3,6 +3,7 @@ import mido
 import math
 import numpy as np
 import copy
+import pretty_midi
 
 
 MIDLVL_INSERT = 1
@@ -137,6 +138,7 @@ class lowlvl:
         #notes should be with the same dtype and fields as na
         #add an offset after src_time, which is presumably the note at which the playhead is
         shift_duration = notes['onset_sec'][-1] + notes['duration_sec'][-1] #corresponding to onset + duration
+        
         self.offset(src_time, shift_duration, "rollback")
 
         #starting performance na time:
@@ -173,9 +175,32 @@ class lowlvl:
 
         return
     
-    def _get_label_miditrack(self):
-        for n in self.label_na:
-            #create a track (or more, depending on level) with prettymidi or mido..
-            print('creating miditrack from labels')
+    def inspect_tgt(self):
+        #maybe some functionality to inspect some label specific things would be helpful.
+        return
+    
+    def get_label_miditrack(self, loc):
+        midiobj = self._na_to_miditrack(self.label_na)
+        midiobj.write(loc)
+        return
+    
+    def _na_to_miditrack(self, na):
+        midiobj = pretty_midi.PrettyMIDI()
+        piano_program = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
+        inst = pretty_midi.Instrument(program=piano_program)
+ 
+        for na_note in na:
+            note = pretty_midi.Note(velocity=na_note['velocity'], 
+                                    pitch=na_note['pitch'], 
+                                    start=na_note['onset_sec'], 
+                                    end=na_note['onset_sec'] + na_note['duration_sec'])
+            inst.notes.append(note)
+
+        midiobj.instruments.append(inst)
+        return midiobj
+    
+    def get_target_miditrack(self, loc):
+        midiobj = self._na_to_miditrack(self.tgt_na)
+        midiobj.write(loc)
         return
     
