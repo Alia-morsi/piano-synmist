@@ -7,6 +7,7 @@ import copy
 from region_classifier import RegionClassifier
 import hook
 
+
 class Mistaker():
     def __init__(self, performance_path, burgmuller=False):
         """This is the functionality for detecting / parsing regions of interest, 
