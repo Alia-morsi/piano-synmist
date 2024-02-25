@@ -67,7 +67,6 @@ class Mistaker():
                 "mistouch": 10,
                 "pitch_change": 10,
                 "drag": 10
-
                 #is it even possible to have numbers less than 10?
             }):
         """Based on heuristics and classified regions, create mistakes.
@@ -166,7 +165,7 @@ class Mistaker():
         duration = note['duration_sec'][0] + np.random.uniform(low=0.0, high=0.5) * 0.05 
         velocity = int(((np.random.random() * 0.5) + 0.5) * note['velocity'])
 
-        self.change_tracker.pitch_insert(onset, insert_pitch['pitch'], duration, velocity, "fwdbckwd", "insert")
+        self.change_tracker.pitch_insert(onset, insert_pitch['pitch'], duration, velocity, "fwdbackwd", "pitch_insert")
         print(f"added forward={forward} insertion at note {note['id']} with pitch {insert_pitch['pitch']}.")
 
 
@@ -185,7 +184,7 @@ class Mistaker():
         duration = 0.2
         velocity = 60
 
-        self.change_tracker.pitch_insert(note['onset_sec'], insert_pitch, duration, velocity, "mistouch", "insertion")
+        self.change_tracker.pitch_insert(note['onset_sec'], insert_pitch, duration, velocity, "mistouch", "pitch_insert")
         print(f"added mistouch insertion at note {note['id']} with pitch {insert_pitch}.")
 
     #probably pitch change the same as the confident substitution. 
@@ -212,8 +211,8 @@ class Mistaker():
             else:
                 changed_pitch = note['pitch'] + np.random.choice([-2, -1, 1, 2])
         
-        self.change_tracker.pitch_insert(note['onset_sec'], changed_pitch, note['duration_sec'], note['velocity'], "confident_subs", "insertion")
-        self.change_tracker.pitch_delete(note['onset_sec'], note['pitch'], "confident_subs", "deletion")
+        self.change_tracker.pitch_insert(note['onset_sec'], changed_pitch, note['duration_sec'], note['velocity'], "wrong_pred", "insertion")
+        self.change_tracker.pitch_delete(note['onset_sec'], note['pitch'], "wrong_pred", "pitch_delete")
 
         print(f"added pitch change at note {note['id']} with pitch {changed_pitch}.")
 
