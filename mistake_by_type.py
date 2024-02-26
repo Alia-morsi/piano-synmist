@@ -77,7 +77,7 @@ class Mistaker():
             counter = 0
             # turn the predefined probablity into an array to decide with texture region is chosen.
             #why is p multiplied by 10
-            sample_array = [[texture_group] * int(p * n_mistakes[mistake_type]) for texture_group, p in self.sampling_prob[mistake_type].items()]
+            sample_array = [[texture_group] * int(p * 10) for texture_group, p in self.sampling_prob[mistake_type].items()]
             sample_array = [y for x in sample_array for y in x]
 
             #check sample_array
@@ -279,3 +279,9 @@ if __name__ == '__main__':
         mk = Mistaker(path)
 
     # mk = Mistaker("/Users/huanzhang/01Acdemics/PhD/Research/Datasets/Burgmuller/b-02-annot.mid", burgmuller=True)
+        
+
+    mist = Mistaker('/Users/huanzhang/01Acdemics/PhD/Research/SynthMistakes/data_processing/Alfreds_1/Bourlesq_Klav.mid')
+    mist.mistake_scheduler()
+    mist.change_tracker.get_target_miditrack('tgt.mid')
+    mist.change_tracker.get_label_miditrack('label.mid')
