@@ -256,16 +256,18 @@ class Mistaker():
         #Although it's a bug, it is sensible behaviour because it would take more human processing
         #time to reflect on all the notes pressed and identify the source of the problem.
 
+        #the accumulator logic would have only made sense if we changed the notes offset only in the loop,
+        #accumulated the total offset, and then did the shift after the loop. This approach would allow
+        #us to handle the case highlighted above, where offsets applied to notes which are played at the
+        #same time should not accumulate.
+
         drag_time_accum = drag_time
         for n in notes_shortly_after:
             ripple_drag_time_n =  (drag_time * 1.5) * np.random.random()
-            self.change_tracker.time_offset(n['note_on'], ripple_drag_time_n, 'drag')
+            self.change_tracker.time_offset(n['note_on'], ripple_drag_time_n, 'drag') 
             self.change_tracker.change_note_offset(n['note_on'], n['pitch'], 
                                                    ripple_drag_time_n, 'drag')
-            if drag_time_accum > 1:
-                print('long drag')
-                import pdb
-                pdb.set_trace()
+
             drag_time_accum += ripple_drag_time_n
 
             #add the wiggle velocity function
@@ -277,9 +279,7 @@ class Mistaker():
             #        nn['note_on'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
             #        nn['note_off'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
             #        nn['velocity'] = int(((np.random.random() * 0.3) + 0.7) * nn['velocity'])
-            #    else:
-            #       nn['note_on'] += drag_time
-            #        nn['note_off'] += drag_time
+           
 
         print(f"added rhythm drag from note {note['id']}.")
 
