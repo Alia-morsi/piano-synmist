@@ -64,10 +64,10 @@ class Mistaker():
 
     ########### Function for scheduling mistakes #################
     def mistake_scheduler(self, n_mistakes={
-                "forward_backward_insertion": 10,
-                "mistouch": 10,
-                "pitch_change": 10,
-                "drag": 10
+                # "forward_backward_insertion": 10,
+                # "mistouch": 10,
+                # "pitch_change": 10,
+                "drag": 2
                 #is it even possible to have numbers less than 10?
             }):
         """Based on heuristics and classified regions, create mistakes.
@@ -226,6 +226,7 @@ class Mistaker():
             2. the restarted passages also come with lower volume. 
             drag window the window after the starting note for which drags will continue happening.
         """
+        print("calling drag")
         # dragging can happen at most 1 - 3 times the duration of the note
         
         #logic:
@@ -242,6 +243,7 @@ class Mistaker():
         # identify a way to change the velocity until 'normal' playing is resumed.. (gradual decrease? etc)
         # for every note drag, timeshift the notes that come after
         drag_time = np.random.uniform(0.2, 0.8) * note['duration_sec'][0] #otherwise everything becomes an array..
+
         self.change_tracker.change_note_offset(note['onset_sec'], note['pitch'], drag_time, 'drag')
 
         #open quesiton: do drag times start shorter and then get longer, or the other way round??
@@ -258,7 +260,10 @@ class Mistaker():
         for n in notes_shortly_after:
             ripple_drag_time_n =  (drag_time * 1.5) * np.random.random()
             self.change_tracker.time_offset(n['note_on'], drag_time_accum, 'drag')
-            self.change_tracker.change_note_offset(n['note_on'], n['pitch'], 
+            print("ripple_drag_time", ripple_drag_time_n)
+            print("drag_time_accum", drag_time_accum)
+            # hook()
+            self.change_tracker.change_note_offset(n['note_on'], n['midi_pitch'], 
                                                    ripple_drag_time_n, 'drag')
             drag_time_accum += ripple_drag_time_n
 
@@ -277,6 +282,8 @@ class Mistaker():
 
         print(f"added rhythm drag from note {note['id']}.")
 
+
+
 if __name__ == '__main__':
     #parametrizable things
     #"forward_backward_insertion": 10,
@@ -284,9 +291,9 @@ if __name__ == '__main__':
     #"pitch_change": 10,
     #"drag": 10
 
-    import glob
-    for path in glob.glob("/Users/huanzhang/01Acdemics/PhD/Research/SynthMistakes/data_processing/burgmuller/*[!k].mid"):
-        mk = Mistaker(path)
+    # import glob
+    # for path in glob.glob("/Users/huanzhang/01Acdemics/PhD/Research/SynthMistakes/data_processing/burgmuller/*[!k].mid"):
+    #     mk = Mistaker(path)
 
     # mk = Mistaker("/Users/huanzhang/01Acdemics/PhD/Research/Datasets/Burgmuller/b-02-annot.mid", burgmuller=True)
         
