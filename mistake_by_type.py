@@ -96,7 +96,7 @@ class Mistaker():
                 #might not be needed tho.. test sorting first. 
 
                 if mistake_type == 'forward_backward_insertion':
-                #    # TODO: get the ascending parameter.
+                    # TODO: get the ascending parameter.
                     try:
                         self.forward_backward_insertion(note, forward=(np.random.random() > 0.5), marking=True)
                     except Exception as e:
@@ -241,8 +241,11 @@ class Mistaker():
         # identify a way to change the velocity until 'normal' playing is resumed.. (gradual decrease? etc)
         # for every note drag, timeshift the notes that come after
         drag_time = np.random.uniform(0.2, 0.8) * note['duration_sec'][0] #otherwise everything becomes an array..
-        self.change_tracker.change_note_offset(note['onset_sec'], note['pitch'], drag_time, 'drag')
+        if not self.change_tracker.change_note_offset(note['onset_sec'], note['pitch'], drag_time, 'drag'):
+            print('exit drag function for initial pitch not found')
+            return
 
+        print('continue drag')
         #open quesiton: do drag times start shorter and then get longer, or the other way round??
         #the mult by 1.5 is to test how it sounds when we assume it will get longer. 
         #maybe that should also be something randomized. 
@@ -256,9 +259,13 @@ class Mistaker():
         drag_time_accum = drag_time
         for n in notes_shortly_after:
             ripple_drag_time_n =  (drag_time * 1.5) * np.random.random()
-            self.change_tracker.time_offset(n['note_on'], drag_time_accum, 'drag')
+            self.change_tracker.time_offset(n['note_on'], ripple_drag_time_n, 'drag')
             self.change_tracker.change_note_offset(n['note_on'], n['pitch'], 
                                                    ripple_drag_time_n, 'drag')
+            if drag_time_accum > 1:
+                print('long drag')
+                import pdb
+                pdb.set_trace()
             drag_time_accum += ripple_drag_time_n
 
             #add the wiggle velocity function

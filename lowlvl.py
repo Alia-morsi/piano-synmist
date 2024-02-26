@@ -188,11 +188,11 @@ class lowlvl:
         found, note_idx, note_start = self._find_note_in_tgt(src_time, pitch)
         #it should always be found.. unless the note has been deleted in prior processing. 
         if not found:
-            return
+            return False
         self.tgt_na['duration_sec'][note_idx] += offset_shift
         note_end = note_start + self.tgt_na['duration_sec'][note_idx]
         self._label_note(note_start, note_end, "change_offset", midlvl_label)
-        return
+        return True
     
     def change_note_onset(self, src_time, pitch, onset_shift, midlvl_label, lowlvl_label):
         #this would have a limit, because if it goes tooooo far, then it should be a deleted note in
