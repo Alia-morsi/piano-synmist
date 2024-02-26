@@ -240,7 +240,7 @@ class Mistaker():
         # drag the offset of the identified notes 
         # identify a way to change the velocity until 'normal' playing is resumed.. (gradual decrease? etc)
         # for every note drag, timeshift the notes that come after
-        drag_time = np.random.uniform(0.2, 0.8) * note['duration_sec']
+        drag_time = np.random.uniform(0.2, 0.8) * note['duration_sec'][0] #otherwise everything becomes an array..
         self.change_tracker.change_note_offset(note['onset_sec'], note['pitch'], drag_time, 'drag')
 
         drag_time_accum = drag_time

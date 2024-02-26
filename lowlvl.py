@@ -7,7 +7,7 @@ import pretty_midi
 
 #MIDI Locations for the labels so that we can decipher what's being output.
 
-MID_FWDBCKWD = 21      #A0
+MID_FWDBCKWD = 21      #A1
 MID_ROLLBACK = 25      #C#1
 MID_MISTOUCH = 28      #E1
 MID_WRNG_PRED_INS = 30 #F#1
@@ -240,7 +240,7 @@ class lowlvl:
 
         self.time_to[nearestIdx:] += offset_time       
         self._shift_labels(src_time, offset_time)
-        self._label_note(time_in_tgtna, offset_time, "time_offset", midlvl_label)
+        self._label_note(time_in_tgtna, offset_time, "time_shift", midlvl_label)
         return
     
     def inspect_tgt(self):
