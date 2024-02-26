@@ -105,9 +105,8 @@ class Mistaker():
                     self.mistouch(note, marking=True)
                 if mistake_type == 'pitch_change':
                     self.pitch_change(note, marking=True)
-                #if mistake_type == 'drag': #commented out for now due to crash in the drag function.
-                #    self.drag(note, marking=True)
-
+                if mistake_type == 'drag': 
+                    self.drag(note, marking=True)
         return
 
     def sample_group(self, data, group):
@@ -122,6 +121,7 @@ class Mistaker():
 
     ########### Mid Level Mistake Functions ############
     def rollback(self):
+        #implement a rollback como dios manda..
         #find src note
         #find note to go back to
         #call glback with these parameters.
@@ -165,7 +165,7 @@ class Mistaker():
         duration = note['duration_sec'][0] + np.random.uniform(low=0.0, high=0.5) * 0.05 
         velocity = int(((np.random.random() * 0.5) + 0.5) * note['velocity'])
 
-        self.change_tracker.pitch_insert(onset, insert_pitch['pitch'], duration, velocity, "fwdbackwd", "pitch_insert")
+        self.change_tracker.pitch_insert(onset, insert_pitch['pitch'], duration, velocity, "fwdbackwd")
         print(f"added forward={forward} insertion at note {note['id']} with pitch {insert_pitch['pitch']}.")
 
 
@@ -184,7 +184,7 @@ class Mistaker():
         duration = 0.2
         velocity = 60
 
-        self.change_tracker.pitch_insert(note['onset_sec'], insert_pitch, duration, velocity, "mistouch", "pitch_insert")
+        self.change_tracker.pitch_insert(note['onset_sec'], insert_pitch, duration, velocity, "mistouch")
         print(f"added mistouch insertion at note {note['id']} with pitch {insert_pitch}.")
 
     #probably pitch change the same as the confident substitution. 
@@ -211,46 +211,60 @@ class Mistaker():
             else:
                 changed_pitch = note['pitch'] + np.random.choice([-2, -1, 1, 2])
         
-        self.change_tracker.pitch_insert(note['onset_sec'], changed_pitch, note['duration_sec'], note['velocity'], "wrong_pred", "insertion")
-        self.change_tracker.pitch_delete(note['onset_sec'], note['pitch'], "wrong_pred", "pitch_delete")
+        self.change_tracker.pitch_insert(note['onset_sec'], changed_pitch, note['duration_sec'], note['velocity'], "wrong_pred")
+        self.change_tracker.pitch_delete(note['onset_sec'], note['pitch'], "wrong_pred")
 
         print(f"added pitch change at note {note['id']} with pitch {changed_pitch}.")
 
-
-
     #Make the rhythm mistakes for tomorrow..
     ########### Functions for rhythm mistakes ####################
-    def drag(self, note, marking=False):
+    #range of dragtime is potentially parametrizable.
+    def drag(self, note, drag_window=5, marking=False):
         """a drag / hesitation on the note position 
-        
         details: 1. after the drag, restarted passages will be slower
             2. the restarted passages also come with lower volume. 
-        
+            drag window the window after the starting note for which drags will continue happening.
         """
-
         # dragging can happen at most 1 - 3 times the duration of the note
-        drag_time = ((np.random.random() * 2) + 1) * note['duration_sec']
+        
+        #logic:
+        #mark the note at the given id.
+        #then, if the note being processed is close to the onset of the input note by 0.05
+        #then drag the offset
+        #and, shift notes.
 
-        for nn in self.performance.performedparts[0].notes:
-            if nn['id'] == note['id']:
-                marking_note = copy.deepcopy(nn)
+        #if within drag window:
+        notes_shortly_after = [n for n in self.performance.performedparts[0].notes 
+                               if 0 < n['note_on'] - note['onset_sec'] <= note['duration_sec'] * drag_window]
 
-            # drag the offset of given note. 
-            if np.isclose(nn['note_on'], note['onset_sec'], atol=0.05):
-                nn['note_off'] += drag_time * np.random.random()
+        # drag the offset of the identified notes 
+        # identify a way to change the velocity until 'normal' playing is resumed.. (gradual decrease? etc)
+        # for every note drag, timeshift the notes that come after
+        drag_time = np.random.uniform(0.2, 0.8) * note['duration_sec']
+        self.change_tracker.change_note_offset(note['onset_sec'], note['pitch'], drag_time, 'drag')
+
+        drag_time_accum = drag_time
+        for n in notes_shortly_after:
+            ripple_drag_time_n =  drag_time * np.random.random()
+            self.change_tracker.time_offset(n['note_on'], drag_time_accum, 'drag')
+            self.change_tracker.change_note_offset(n['note_on'], n['pitch'], 
+                                                   ripple_drag_time_n, 'drag')
+            drag_time_accum += ripple_drag_time_n
+
+            #add the wiggle velocity function
 
             # shift forward all later notes by the drag time 
-            if (nn['note_on'] - note['onset_sec']) > 0.05:
+            #if (nn['note_on'] - note['onset_sec']) > 0.05:
                 # for the neighboring notes, slow down their tempo and decrease volume
-                if (nn['note_on'] - note['onset_sec']) < note['duration_sec'] * 3:
-                    nn['note_on'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
-                    nn['note_off'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
-                    nn['velocity'] = int(((np.random.random() * 0.3) + 0.7) * nn['velocity'])
-                else:
-                    nn['note_on'] += drag_time
-                    nn['note_off'] += drag_time
+            #    
+            #        nn['note_on'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
+            #        nn['note_off'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
+            #        nn['velocity'] = int(((np.random.random() * 0.3) + 0.7) * nn['velocity'])
+            #    else:
+            #       nn['note_on'] += drag_time
+            #        nn['note_off'] += drag_time
 
-        print(f"added rhythm drag at note {note['id']}.")
+        print(f"added rhythm drag from note {note['id']}.")
 
 if __name__ == '__main__':
     #parametrizable things
