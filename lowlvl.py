@@ -7,19 +7,20 @@ import pretty_midi
 
 #MIDI Locations for the labels so that we can decipher what's being output.
 
-MID_FWDBCKWD = 21      #A1
+MID_FWDBCKWD = 21      #A0
 MID_ROLLBACK = 25      #C#1
 MID_MISTOUCH = 28      #E1
 MID_WRNG_PRED_INS = 30 #F#1
 MID_DRAG = 33          #A1
 
-LOW_INSERT = 1 #C#0
-LOW_DELETE = 3 #D#0
-LOW_GOBACK = 5 #F0
-LOW_SHIFT = 7  #G0
-LOW_GOBACK = 9 #A#0
+LOW_INSERT = 1 #C#-1
+LOW_DELETE = 3 #D#-1
+LOW_GOBACK = 5 #F-1
+LOW_SHIFT = 7  #G-1
+LOW_CHG_OFFSET = 9 #A-1
+LOW_CHG_ONSET = 11 #B-1
 
-DEFAULT_MID = 20 #G#2
+DEFAULT_MID = 20 #G#0
 DEFAULT_LOW = 0  #C-1
 
 mid_label_pitch_map = {
@@ -33,7 +34,9 @@ low_label_pitch_map = {
     'pitch_insert': LOW_INSERT,
     'pitch_delete': LOW_DELETE, 
     'time_shift': LOW_SHIFT, 
-    'go_back': LOW_GOBACK
+    'go_back': LOW_GOBACK, 
+    'change_offset': LOW_CHG_OFFSET, 
+    'change_onset': LOW_CHG_ONSET
 }
 
 LABEL_VELOCITY = 10
@@ -58,6 +61,9 @@ regular_na_fields = [('onset_sec', '<f4'), ('duration_sec', '<f4'), ('onset_tick
 #in this case.
 
 #food for thought, should the label be the same for low level and mid level stuff?
+
+#TODO: have a function that merges mid_level labels done by the same 'event'. 
+# group_mid (start, end), and would merge the notes of the same mid level event into 1.
 
 class lowlvl:
     def __init__(self, src_na):
@@ -120,24 +126,31 @@ class lowlvl:
         self.tgt_na = np.concatenate((self.tgt_na, new_note))
 
         self.tgt_na.sort(order='onset_sec')
-        self._label_note(tgt_insertion_time, tgt_insertion_time +duration, midlvl_label, 'pitch_insert')
+        self._label_note(tgt_insertion_time, tgt_insertion_time+duration, 'pitch_insert', midlvl_label)
         return
     
     def _find_note_in_tgt(self, src_time, pitch):
         nearestIdx = np.fabs(self.time_from - src_time).argmin()
         time_in_tgtna = self.time_to[nearestIdx]
-
         window = 0.05 #a window 50 ms before and after for trying to find the onset of the pitch in question.
 
         #we could evade little time offset problems by:
         #1. setting a tol. window around the src_time (which we do) which we check for all notes of the specified
         # pitch and get the nearest one to the given time.
         #2. find all notes of that pitch in the score and just choose the nearest one within a thresh.
-        lowerbound_in_tgt_na = np.fabs(np.array([i['onset_sec'] for i in self.tgt_na]) - (time_in_tgtna - window)).argmin()
-        upperbound_in_tgt_na = np.fabs(np.array([i['onset_sec'] for i in self.tgt_na]) - (time_in_tgtna + window)).argmin()
+        lowerbound_in_tgt_na = np.fabs(np.array(self.tgt_na['onset_sec'] - (time_in_tgtna - window))).argmin()
+
+        #upperbound isn't done by a oneliner because we need to return the last min. index, not the first:
+        tgt_onset_dist_from_upperbound_time = np.fabs(np.array(self.tgt_na['onset_sec']  - (time_in_tgtna + window)))
+        upperbound_in_tgt_na = np.where(
+            tgt_onset_dist_from_upperbound_time == tgt_onset_dist_from_upperbound_time.min())[0][-1]
+        #this indexing above should always have a value if the inputs are not empty..
 
         found = False
         note_options = []
+
+        #the problem with the lowerbound and upperbound logic is that, in case of chords, there can be several
+        #notes at that time, and argmin will only return the index of the first..
 
         for i in range(lowerbound_in_tgt_na, upperbound_in_tgt_na+1):
             #find all notes with the corresponding pitch
@@ -145,8 +158,10 @@ class lowlvl:
                 note_options.append((self.tgt_na['onset_sec'][i], i))
                 found = True
                 
-        if found==False:                                                                                    
-            print('pitch not found')  
+        if found==False:                   
+            #import pdb
+            #pdb.set_trace()
+            print('pitch {} not found at time {}'.format(pitch, src_time)) 
             return False, None, None
         else:
             #find closest to the src_time from the list. should be at the top
@@ -174,8 +189,8 @@ class lowlvl:
         #it should always be found.. unless the note has been deleted in prior processing. 
         if not found:
             return
+        self.tgt_na['duration_sec'][note_idx] += offset_shift
         note_end = note_start + self.tgt_na['duration_sec'][note_idx]
-        self.tgt_na[note_idx]['duration_sec'] += offset_shift
         self._label_note(note_start, note_end, "change_offset", midlvl_label)
         return
     
@@ -203,7 +218,6 @@ class lowlvl:
         #meaning that we might have to take into account that the notes are inserted after the notes end, 
         #currently the logic would probably just add them starting the src_time. 
         shift_duration = notes['onset_sec'][-1] + notes['duration_sec'][-1] #corresponding to onset + duration
-        
         self.offset(src_time, shift_duration, "rollback")
 
         #starting performance na time:
@@ -240,7 +254,7 @@ class lowlvl:
 
         self.time_to[nearestIdx:] += offset_time       
         self._shift_labels(src_time, offset_time)
-        self._label_note(time_in_tgtna, offset_time, "time_shift", midlvl_label)
+        self._label_note(time_in_tgtna, time_in_tgtna+offset_time, "time_shift", midlvl_label)
         return
     
     def inspect_tgt(self):
