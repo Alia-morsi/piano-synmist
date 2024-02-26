@@ -96,7 +96,7 @@ class Mistaker():
                 #might not be needed tho.. test sorting first. 
 
                 if mistake_type == 'forward_backward_insertion':
-                    # TODO: get the ascending parameter.
+                #    # TODO: get the ascending parameter.
                     try:
                         self.forward_backward_insertion(note, forward=(np.random.random() > 0.5), marking=True)
                     except Exception as e:
@@ -165,7 +165,7 @@ class Mistaker():
         duration = note['duration_sec'][0] + np.random.uniform(low=0.0, high=0.5) * 0.05 
         velocity = int(((np.random.random() * 0.5) + 0.5) * note['velocity'])
 
-        self.change_tracker.pitch_insert(onset, insert_pitch['pitch'], duration, velocity, "fwdbackwd")
+        self.change_tracker.pitch_insert(onset, insert_pitch['pitch'], duration, velocity, "fwdbackwd") 
         print(f"added forward={forward} insertion at note {note['id']} with pitch {insert_pitch['pitch']}.")
 
 
@@ -243,9 +243,19 @@ class Mistaker():
         drag_time = np.random.uniform(0.2, 0.8) * note['duration_sec'][0] #otherwise everything becomes an array..
         self.change_tracker.change_note_offset(note['onset_sec'], note['pitch'], drag_time, 'drag')
 
+        #open quesiton: do drag times start shorter and then get longer, or the other way round??
+        #the mult by 1.5 is to test how it sounds when we assume it will get longer. 
+        #maybe that should also be something randomized. 
+
+        #another drag artifact is that probably if there are multiple notes 
+        #at the same time, their drag should not be added to the accum function!..
+        #this explains why we observe longer offsets after a drag is a applied at the site of a chord
+        #Although it's a bug, it is sensible behaviour because it would take more human processing
+        #time to reflect on all the notes pressed and identify the source of the problem.
+
         drag_time_accum = drag_time
         for n in notes_shortly_after:
-            ripple_drag_time_n =  drag_time * np.random.random()
+            ripple_drag_time_n =  (drag_time * 1.5) * np.random.random()
             self.change_tracker.time_offset(n['note_on'], drag_time_accum, 'drag')
             self.change_tracker.change_note_offset(n['note_on'], n['pitch'], 
                                                    ripple_drag_time_n, 'drag')
