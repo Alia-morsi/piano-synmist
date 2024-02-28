@@ -257,10 +257,10 @@ class lowlvl:
         self._shift_labels(src_time_from, (src_time_from - src_time_to))
         self._label_note(time_in_tgtna, time_in_tgtna + (src_time_from - src_time_to), "time_shift", midlvl_label)
 
-        #if (src_time_from - src_time_to) > 0.5:
-        #    import pdb
-        #    pdb.set_trace()
-        
+        if (src_time_from - src_time_to) > 1:
+            import pdb
+            pdb.set_trace()
+
         #change the grid so that src_time_to (where we want to return to) now points to our new
         #starting point (which was src_time_from)
         nearestIdx_src_time_to = np.fabs(self.time_from - src_time_to).argmin()
