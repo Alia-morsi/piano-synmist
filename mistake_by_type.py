@@ -15,6 +15,12 @@ import lowlvl
 #This would be implemented as a class that maintains the src(whether score or rendered perf) and tgt,
 #and handle the labelling. 
 
+rollback_association_prob = {
+    'mistouch': 0, 
+    'pitch_change': 0.5,
+    'drag': 0.6
+}
+
 class Mistaker():
     def __init__(self, performance_path):
         """This is the functionality for detecting / parsing regions of interest, 
@@ -94,19 +100,26 @@ class Mistaker():
                 #order we need. because the random sampling doesn't allow us to do so otherwise..
                 payload = []
                 #might not be needed tho.. test sorting first. 
+                
+                rollback_dice = np.random.random()
 
                 if mistake_type == 'forward_backward_insertion':
                     # TODO: get the ascending parameter.
                     try:
-                        self.forward_backward_insertion(note, forward=(np.random.random() > 0.5), marking=True)
+                        self.forward_backward_insertion(note, forward=(np.random.random() > 0.5))
                     except Exception as e:
                         print(e)
                 if mistake_type == 'mistouch':
-                    self.mistouch(note, marking=True)
+                    self.mistouch(note)
                 if mistake_type == 'pitch_change':
-                    self.pitch_change(note, marking=True)
+                    self.pitch_change(note)
+                    if rollback_dice < rollback_association_prob['pitch_change']:
+                        self.rollback(note, (0, 5))
                 if mistake_type == 'drag': 
-                    self.drag(note, marking=True)
+                    self.drag(note)
+                    if rollback_dice < rollback_association_prob['drag']:
+                        self.rollback(note, (0, 5))
+                        
         return
 
     def sample_group(self, data, group):
@@ -120,15 +133,23 @@ class Mistaker():
         return group_data[np.random.choice(len(group_data), 1, replace=True)]
 
     ########### Mid Level Mistake Functions ############
-    def rollback(self):
-        #implement a rollback como dios manda..
-        #find src note
-        #find note to go back to
-        #call glback with these parameters.
-        print('rollback')
+    def rollback(self, note, events_back_range):
+        #TODO: should have something to permit changes to the notes depending on 'something'.. 
+        num_events_back = np.random.randint(events_back_range[0], events_back_range[1])
+        idx, notes_to_repeat = self.change_tracker.get_notes(note['onset_sec'], num_events_back)
+        #idx probably won't be used at all.
+        #make these notes start from 0, not from whatever their start point was
+        #modify the values of its parameters if needed. TBD for later
+        
+        #notes to repeat is in reverse order.
+        window = (notes_to_repeat['onset_sec'][0] + notes_to_repeat['duration_sec']) - notes_to_repeat['onset_sec'][-1] 
+        onset_shift = notes_to_repeat['onset_sec'][-1]
+        notes_to_repeat['onset_sec'][:] -= onset_shift
+
+        self.change_tracker.go_back(note['onset_sec'], window, notes_to_repeat)
         return
 
-    def forward_backward_insertion(self, note, forward=True, ascending=True, marking=False):
+    def forward_backward_insertion(self, note, forward=True, ascending=True):
         """insert notes that belongs to the previous / later onset
         note: The note that we would like to have mistake inserted around. 
         forward: look for future or past neighbor to double.
@@ -169,7 +190,7 @@ class Mistaker():
         print(f"added forward={forward} insertion at note {note['id']} with pitch {insert_pitch['pitch']}.")
 
 
-    def mistouch(self, note, marking=False):
+    def mistouch(self, note):
         """add mistouched inserted note for the given note."""
 
         #the insertion here should be much shorter than the forward backward.
@@ -189,7 +210,7 @@ class Mistaker():
 
     #probably pitch change the same as the confident substitution. 
     #wonder if the texture should affect which pitch would be mistaken..
-    def pitch_change(self, note, rollback=False, change_chordblock=False, marking=False):
+    def pitch_change(self, note, rollback=False, change_chordblock=False):
         """change the pitch of the given note.
         the changed pitch can be either: the pitch-wise nearest neighboring note, or random 1/2 semitones around
         (TODO)change_chordblock: if True, all notes within that block would change into adjacent chord. 
@@ -219,7 +240,7 @@ class Mistaker():
     #Make the rhythm mistakes for tomorrow..
     ########### Functions for rhythm mistakes ####################
     #range of dragtime is potentially parametrizable.
-    def drag(self, note, drag_window=5, marking=False):
+    def drag(self, note, drag_window=5):
         """a drag / hesitation on the note position 
         details: 1. after the drag, restarted passages will be slower
             2. the restarted passages also come with lower volume. 

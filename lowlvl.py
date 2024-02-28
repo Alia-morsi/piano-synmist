@@ -200,6 +200,36 @@ class lowlvl:
         #this is for wiggles that make sense, without the need to change time_from or time_to.
         return
     
+    def _construct_note_na(self, notes):
+        #just converts a list of notes into the expected na dtype, to avoid confusions on accessing elements..
+        #no sorting is applied.
+        #lol this function was to solve a misunderstood problem..
+        notes_na = np.zeros(0, dtype=self.src_na.dtype)
+        notes_na = np.concatenate((np.array(notes, dtype=self.src_na.dtype), notes_na))
+        return notes_na
+
+    def get_notes(self, src_time, num_events_back):
+        #from src_time, go backwards for num_events_back (a chord is considered as one score event, for ex.)
+        #if there are not enough backwards notes, stop.
+        #num events back 0 is a repeat of the current note.
+        src_onsets = self.src_na['onset_sec']
+        nearest_src_idx = np.fabs(src_onsets - src_time).argmin()
+
+        back_src_idx = nearest_src_idx
+        curr_note = self.src_na[back_src_idx]
+        notes = [curr_note]
+        while(num_events_back):
+            if back_src_idx == 0:
+                return back_src_idx, self._construct_note_na(notes)
+            
+            if self.src_na['onset_sec'][back_src_idx-1] != curr_note['onset_sec']:
+                curr_note = self.src_na[back_src_idx-1]
+                num_events_back -=1
+            new_note = copy.deepcopy(self.src_na[back_src_idx-1])
+            notes.append(new_note)
+            back_src_idx -= 1
+        return back_src_idx, self._construct_note_na(notes) #the first note event will be returned last.
+    
     #Since the notes themselves are passed on by the caller, the only purpose of go_back
     #is to ensure that: 1 the labels are correct, and that the timefrom/time to makes sense, since we 
     #want to keep the perf. array and the labels hidden from the midlevel.
@@ -218,7 +248,7 @@ class lowlvl:
         #meaning that we might have to take into account that the notes are inserted after the notes end, 
         #currently the logic would probably just add them starting the src_time. 
         shift_duration = notes['onset_sec'][-1] + notes['duration_sec'][-1] #corresponding to onset + duration
-        self.offset(src_time, shift_duration, "rollback")
+        self.time_offset(src_time, shift_duration, "rollback")
 
         #starting performance na time:
         nearest_time_Idx = np.fabs(self.time_from - src_time).argmin()
