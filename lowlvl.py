@@ -206,6 +206,7 @@ class lowlvl:
         #lol this function was to solve a misunderstood problem..
         notes_na = np.zeros(0, dtype=self.src_na.dtype)
         notes_na = np.concatenate((np.array(notes, dtype=self.src_na.dtype), notes_na))
+        notes_na.sort(order='onset_sec') 
         return notes_na
 
     def get_notes(self, src_time, num_events_back):
@@ -241,24 +242,33 @@ class lowlvl:
     #there is also a limitation with the labels, since it's all put as a rollback whereas
     #each note, in comparision to the score portion rolled back, should have its own label
     #but for now we move on..
-    def go_back(self, src_time, back_time, notes=[]):
-        #notes should be with the same dtype and fields as na
-        #add an offset after src_time, which is presumably the note at which the playhead is
-        #rollback. if i say i want to roll back from a point, and this note coincides with a note onset, probably we need to play these notes before doing the rollback.
-        #meaning that we might have to take into account that the notes are inserted after the notes end, 
-        #currently the logic would probably just add them starting the src_time. 
-        shift_duration = notes['onset_sec'][-1] + notes['duration_sec'][-1] #corresponding to onset + duration
-        self.time_offset(src_time, shift_duration, "rollback")
+    def go_back(self, src_time_to, src_time_from, notes=[], midlvl_label="rollback"):
+        #The variable names are hell.. time from and time to.. and src_time_from and src_time_to..
+        #same for an offset (Shift) vs a note offset.. all confusing..
+        #TODO: check that src_time_to < src_time_from
+       
+        #add a time offset with the necessary time window for the new notes after src_time_from's equivalent
+        #nearest_Idx represents src_time_from's location
+        #window = (notes['onset_sec'][-1] + notes['duration_sec'][-1]) - notes['onset_sec'][0] 
+        nearestIdx_src_time_from = np.fabs(self.time_from - src_time_from).argmin()
+        time_in_tgtna = self.time_to[nearestIdx_src_time_from]
+        tgt_na_idx = np.fabs([self.tgt_na['onset_sec'] - time_in_tgtna]).argmin() #not sure if it should be one greater.. look out
+        self.tgt_na[tgt_na_idx:]['onset_sec'] += (src_time_from - src_time_to)
+        self._shift_labels(src_time_from, (src_time_from - src_time_to))
+        self._label_note(time_in_tgtna, time_in_tgtna + (src_time_from - src_time_to), "time_shift", midlvl_label)
 
-        #starting performance na time:
-        nearest_time_Idx = np.fabs(self.time_from - src_time).argmin()
-        time_in_tgtna = self.time_to[nearest_time_Idx]
+        if (src_time_from - src_time_to) > 0.5:
+            import pdb
+            pdb.set_trace()
+        #change the grid so that src_time_to (where we want to return to) now points to our new
+        #starting point (which was src_time_from)
+        nearestIdx_src_time_to = np.fabs(self.time_from - src_time_to).argmin()
+        self.time_to[nearestIdx_src_time_to:] += (src_time_from - src_time_to)     
+        #what happens to the labels in that case. they should be aligned with tgt_na they should accomodate for the same shift applied.. 
 
-        #in theory, since the offset is done, all we should do is append the notes at the correct time
-        #and sort
+        #append the notes at the correct time and sort
         for note in notes:
             note['onset_sec'] += time_in_tgtna
-            #make sure that notes fits the dtype of self.tgt_na.dtype
         
         self.tgt_na = np.concatenate((self.tgt_na, notes))
         self.tgt_na.sort(order='onset_sec') 

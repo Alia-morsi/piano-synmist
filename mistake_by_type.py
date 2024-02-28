@@ -117,6 +117,9 @@ class Mistaker():
                         self.rollback(note, (0, 5))
                 if mistake_type == 'drag': 
                     self.drag(note)
+                    #doesn't make sense to add it after the first note of the drag.
+                    #makes sense to add it after the whole drag window, but to return to 
+                    #the first note dragged.
                     if rollback_dice < rollback_association_prob['drag']:
                         self.rollback(note, (0, 5))
                         
@@ -134,19 +137,25 @@ class Mistaker():
 
     ########### Mid Level Mistake Functions ############
     def rollback(self, note, events_back_range):
+        #what note am i passing in is the note I want to go back from.
         #TODO: should have something to permit changes to the notes depending on 'something'.. 
         num_events_back = np.random.randint(events_back_range[0], events_back_range[1])
         idx, notes_to_repeat = self.change_tracker.get_notes(note['onset_sec'], num_events_back)
         #idx probably won't be used at all.
         #make these notes start from 0, not from whatever their start point was
         #modify the values of its parameters if needed. TBD for later
-        
-        #notes to repeat is in reverse order.
-        window = (notes_to_repeat['onset_sec'][0] + notes_to_repeat['duration_sec']) - notes_to_repeat['onset_sec'][-1] 
-        onset_shift = notes_to_repeat['onset_sec'][-1]
+
+        onset_shift = notes_to_repeat['onset_sec'][0] #the first onset in the notes to be repeated
         notes_to_repeat['onset_sec'][:] -= onset_shift
 
-        self.change_tracker.go_back(note['onset_sec'], window, notes_to_repeat)
+        #I wonder if I need to add some little buffer of silence.
+        #I add the duration to note['onset_sec'] because I want the addition to happen after the note
+        #ends.
+
+        #hesitation before repeating notes
+        hesitation = 0.2 #randomize
+        self.change_tracker.time_offset(note['onset_sec']+ note['duration_sec'], hesitation, 'rollback')
+        self.change_tracker.go_back(onset_shift, note['onset_sec']+ note['duration_sec'], notes_to_repeat)
         return
 
     def forward_backward_insertion(self, note, forward=True, ascending=True):
