@@ -67,7 +67,7 @@ class Mistaker():
                 # "forward_backward_insertion": 10,
                 # "mistouch": 10,
                 # "pitch_change": 10,
-                "drag": 2
+                "drag": 5
                 #is it even possible to have numbers less than 10?
             }):
         """Based on heuristics and classified regions, create mistakes.
@@ -226,7 +226,6 @@ class Mistaker():
             2. the restarted passages also come with lower volume. 
             drag window the window after the starting note for which drags will continue happening.
         """
-        print("calling drag")
         # dragging can happen at most 1 - 3 times the duration of the note
         
         #logic:
@@ -248,7 +247,6 @@ class Mistaker():
             print('exit drag function for initial pitch not found')
             return
 
-        print('continue drag')
         #open quesiton: do drag times start shorter and then get longer, or the other way round??
         #the mult by 1.5 is to test how it sounds when we assume it will get longer. 
         #maybe that should also be something randomized. 
@@ -263,15 +261,10 @@ class Mistaker():
         for n in notes_shortly_after:
             ripple_drag_time_n =  (drag_time * 1.5) * np.random.random()
             self.change_tracker.time_offset(n['note_on'], ripple_drag_time_n, 'drag')
-            print("ripple_drag_time", ripple_drag_time_n)
-            print("drag_time_accum", drag_time_accum)
-            # hook()
             self.change_tracker.change_note_offset(n['note_on'], n['midi_pitch'], 
                                                    ripple_drag_time_n, 'drag')
             if drag_time_accum > 1:
                 print('long drag')
-                import pdb
-                pdb.set_trace()
             drag_time_accum += ripple_drag_time_n
 
             #add the wiggle velocity function
@@ -306,6 +299,7 @@ if __name__ == '__main__':
         
 
     mist = Mistaker('/Users/huanzhang/01Acdemics/PhD/Research/SynthMistakes/data_processing/Alfreds_1/Bourlesq_Klav.mid')
+    # mist = Mistaker('/Users/huanzhang/01Acdemics/PhD/Research/SynthMistakes/data_processing/burgmuller/bm2_rendered.mid')
     mist.mistake_scheduler()
     mist.change_tracker.get_target_miditrack('tgt.mid')
     mist.change_tracker.get_label_miditrack('label.mid')
