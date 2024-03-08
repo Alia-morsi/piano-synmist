@@ -1,0 +1,5 @@
+index,forward_backward_insertion,mistouch,pitch_change,drag
+is_double_note,0.4,0.3,0.2,0.2
+is_scale_note,0.3,0.4,0.2,0.4
+is_block_chords_note,0.2,0.1,0.4,0.2
+others,0.1,0.2,0.2,0.2
