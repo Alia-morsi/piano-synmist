@@ -23,3 +23,10 @@ For the augmented version of expert-novice dataset (containing transcribed MIDIs
 ## Teacher's feedback
 
 For interviews with piano teachers, we have put the evaluated samples into an [online questionnaire](https://golisten.ucd.ie/task/acr-test/65e4d319552c347eae0081dd). Their anonymized comments and rating are shown [here](https://drive.google.com/file/d/1YDfxdbq4xlRTDwVIJQ4Yq2oC0ev7b3th/view?usp=sharing). 
+
+
+## SynMist dataset
+<!-- The synthetic mistake MIDI dataset can be found in ```SynMist``` folder.  -->
+
+![plot](asset/symist_statistics.png)
+
