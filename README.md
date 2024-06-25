@@ -1,4 +1,4 @@
-# Simulating and Validating Piano Performance Mistakes for Music Learning
+# Simulating Piano Performance Mistakes for Music Learning
 
 This is the repository of SynMist, containing the synthesized mistake dataset as well as python scripts that generates the mistakes in a taxonomical way. ```mistake_by_type.py``` and ```lowlvl.py``` contains functions regarding to the mid-level mistake scheduler and low-level deviation functions. ```region_classifier.py``` contains the simple texture \ technique region identifier. 
 
