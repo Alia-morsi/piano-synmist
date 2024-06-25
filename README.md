@@ -5,8 +5,9 @@ This is the repository of SynMist, containing the synthesized mistake dataset as
 
 ### Generating mistakes 
 ```
-python mistake_by_type.py --path /path/to/your/file.mid
+python mistake_by_type.py <input_midi_folder> <output_midi_folder> <run_id>
 ```
+This processes all midi performance files in input midi folder, applies mistakes to them, and saves the files in <run_id>/<output_midi_folder)
 
 
 ## Data
