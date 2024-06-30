@@ -8,6 +8,7 @@ import numpy.lib.recfunctions as rfn
 import copy
 from region_classifier import RegionClassifier
 import lowlvl 
+import csv
 
 #Parametrizations:
 #forward_backwards
@@ -15,11 +16,48 @@ import lowlvl
 #This would be implemented as a class that maintains the src(whether score or rendered perf) and tgt,
 #and handle the labelling. 
 
+MAX_DUR4DRAG = 0.5
+
 rollback_association_prob = {
     'mistouch': 0, 
     'pitch_change': 0.5,
     'drag': 0.6
 }
+
+def sort_payload(payload):
+    def precedence(x):
+        ranking = {'forward_backward_insertion': 0, 
+                   'mistouch': 1, 
+                   'pitch_change': 2,
+                   'drag': 3, 
+                   'rollback': 4}
+        return ranking[x]
+    
+    payload = sorted(payload, key=lambda x: (x[0], precedence(x[1]))) #first by time, then by operation
+    return payload
+
+def print_payload_item(p):
+    print('{} - {}'.format(p[0], p[1]))
+def print_payload_list(payload):
+    for p in payload:
+        print_payload_item(p)
+
+def payload_to_csv(payload, fileout):
+    fields = ['time', 'note', 'params']
+    with open(fileout, 'w') as csv_out:
+        writer = csv.writer(csv_out)
+        writer.writerow(fields)
+        for row in payload:
+            writer.writerow(row)
+    return
+
+def timemap_to_csv(time_map, fileout):
+    fields = ['timefrom', 'timeto']
+    with open(fileout, 'w') as csv_out:
+        writer = csv.writer(csv_out)
+        writer.writerow(fields)
+        for row in time_map:
+            writer.writerow(row)
 
 class Mistaker():
     def __init__(self, performance_path):
@@ -31,10 +69,12 @@ class Mistaker():
             performance_path (str): 
         """
         self.performance_path = performance_path
-        self.performance = pt.load_performance(performance_path)
+        #self.performance = pt.load_performance(performance_path)
+        self.performance = pt.load_performance(performance_path, pedal_threshold=127)
 
         #change tracker must be instantiated before the other fields are added from region classifier
         self.change_tracker = lowlvl.lowlvl(self.performance.note_array())
+        
         rc = RegionClassifier(performance_path, save=False)
 
         self.na = rc.na     # note array with region classification
@@ -78,6 +118,7 @@ class Mistaker():
         """Based on heuristics and classified regions, create mistakes.
             n_mistakes: the number of mistakes to add for each group. 
         """
+        payload = []
         for mistake_type, n in n_mistakes.items():
             counter = 0
             # turn the predefined probablity into an array to decide with texture region is chosen.
@@ -96,34 +137,38 @@ class Mistaker():
                     sample_array = list(filter(lambda a: a != texture_group, sample_array))
                     continue
 
-                #create payload to apply mistakes, so we can sort them and apply them in the 
-                #order we need. because the random sampling doesn't allow us to do so otherwise..
-                payload = []
-                #might not be needed tho.. test sorting first. 
-                
-                rollback_dice = np.random.random()
+                #to be filled with tupes as: function name, note, args dict
+                rollback_dice = np.random.random()   
 
                 if mistake_type == 'forward_backward_insertion':
                     # TODO: get the ascending parameter.
-                    try:
-                        self.forward_backward_insertion(note, forward=(np.random.random() > 0.5))
-                    except Exception as e:
-                        print(e)
+                    payload.append((note['onset_sec'], 'forward_backward_insertion', {'note': note, 'forward': np.random.random() > 0.5}))
                 if mistake_type == 'mistouch':
-                    self.mistouch(note)
+                    payload.append((note['onset_sec'], 'mistouch', {'note': note,}))
                 if mistake_type == 'pitch_change':
-                    self.pitch_change(note)
+                    payload.append((note['onset_sec'], 'pitch_change', {'note': note,}))
                     if rollback_dice < rollback_association_prob['pitch_change']:
-                        self.rollback(note, (0, 5))
+                        payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
                 if mistake_type == 'drag': 
-                    self.drag(note)
+                    payload.append((note['onset_sec'], 'drag', {'note': note,}))
                     #doesn't make sense to add it after the first note of the drag.
                     #makes sense to add it after the whole drag window, but to return to 
                     #the first note dragged.
                     if rollback_dice < rollback_association_prob['drag']:
-                        self.rollback(note, (0, 5))
-                        
-        return
+                        payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+
+        #payload_dtype = dtypes = [('start_time', 'U20'), ('data', 'O')]
+        #payload = np.array(payload, dtype=), #consider, just to make the next line more readable
+        payload = sort_payload(payload)
+        
+        for i, p in enumerate(payload):
+            try:
+                #import pdb
+                #pdb.set_trace()
+                self.__getattribute__(p[1])(**p[2])
+            except Exception as e:
+                    print(e)
+        return payload
 
     def sample_group(self, data, group):
     #either returns a note belonging to a texture group, or 0 if it there aren't notes in this texture
@@ -201,7 +246,6 @@ class Mistaker():
 
     def mistouch(self, note):
         """add mistouched inserted note for the given note."""
-
         #the insertion here should be much shorter than the forward backward.
         # white keys can't touch black keys
         if note['pitch'] in self.white_keys: 
@@ -262,20 +306,31 @@ class Mistaker():
         #then, if the note being processed is close to the onset of the input note by 0.05
         #then drag the offset
         #and, shift notes.
+        #import pdb
+        #pdb.set_trace()
 
         #if within drag window:
+        #we hardcode 1.0 as the maximum duration of any note.
         notes_shortly_after = [n for n in self.performance.performedparts[0].notes 
-                               if 0 < n['note_on'] - note['onset_sec'] <= note['duration_sec'] * drag_window]
+                               if 0 < n['note_on'] - note['onset_sec'] <= min(note['duration_sec'], MAX_DUR4DRAG) * drag_window]
 
+        #convert it to a tuple of lists based on onsets
+        notes_shortly_after_dict = {}
+        for n in notes_shortly_after:
+            if n['note_on'] not in notes_shortly_after_dict:
+                notes_shortly_after_dict[n['note_on']] = []
+            notes_shortly_after_dict[n['note_on']].append(n)
+            
         # drag the offset of the identified notes 
         # identify a way to change the velocity until 'normal' playing is resumed.. (gradual decrease? etc)
         # for every note drag, timeshift the notes that come after
-        drag_time = np.random.uniform(0.2, 0.8) * note['duration_sec'][0] #otherwise everything becomes an array..
+        drag_time = np.random.uniform(0.2, 0.8) * min(note['duration_sec'][0], MAX_DUR4DRAG) #otherwise everything becomes an array..
         if not self.change_tracker.change_note_offset(note['onset_sec'], note['pitch'], drag_time, 'drag'):
             print('exit drag function for initial pitch not found')
+            #mport pdb
+            #pdb.set_trace()
             return
 
-        print('continue drag')
         #open quesiton: do drag times start shorter and then get longer, or the other way round??
         #the mult by 1.5 is to test how it sounds when we assume it will get longer. 
         #maybe that should also be something randomized. 
@@ -290,14 +345,18 @@ class Mistaker():
         #accumulated the total offset, and then did the shift after the loop. This approach would allow
         #us to handle the case highlighted above, where offsets applied to notes which are played at the
         #same time should not accumulate.
-
+        #removed the mult of drag_time * 1.5 for ripple drag time.
         drag_time_accum = drag_time
-        for n in notes_shortly_after:
-            ripple_drag_time_n =  (drag_time * 1.5) * np.random.random()
-            self.change_tracker.time_offset(n['note_on'], ripple_drag_time_n, 'drag') 
-            self.change_tracker.change_note_offset(n['note_on'], n['pitch'], 
-                                                   ripple_drag_time_n, 'drag')
-
+        for key, n_list in notes_shortly_after_dict.items():
+            ripple_drag_time_n =  drag_time * np.random.random()
+            n = n_list[0]
+            start_time = n['note_on']
+            self.change_tracker.time_offset(start_time, ripple_drag_time_n, 'drag') 
+            for n in n_list:
+                #this assumes that both the notes will drag with the same time
+                self.change_tracker.change_note_offset(n['note_on'], n['pitch'], 
+                                                   ripple_drag_time_n * np.random.uniform(0.8, 1.2), 'drag')
+                
             drag_time_accum += ripple_drag_time_n
 
             #add the wiggle velocity function
@@ -310,18 +369,38 @@ class Mistaker():
             #        nn['note_off'] += drag_time * ((np.random.random() * 0.5) + 0.5) 
             #        nn['velocity'] = int(((np.random.random() * 0.3) + 0.7) * nn['velocity'])
            
-
         print(f"added rhythm drag from note {note['id']}.")
 
 if __name__ == '__main__':
-    #parametrizable things
-    #"forward_backward_insertion": 10,
-    #"mistouch": 10,
-    #"pitch_change": 10,
-    #"drag": 10
+    import os
+    import pathlib
+    import argparse
+    import tqdm
+    import sys
 
-    import glob
-    for path in glob.glob("/Users/huanzhang/01Acdemics/PhD/Research/SynthMistakes/data_processing/burgmuller/*[!k].mid"):
-        mk = Mistaker(path)
+    parser = argparse.ArgumentParser(description='System to overlay synthetic mistakes on mistake free midi piano performances, whether rendered or real ones')
+    parser.add_argument("in_folder", type=pathlib.Path, help="folder with midi files to be modified with errors")
+    parser.add_argument("out_folder", type=pathlib.Path, help="output folder")
+    parser.add_argument("run_id", help="identifier for this run. used to name out folder")
+    
+    p = parser.parse_args()
 
-    # mk = Mistaker("/Users/huanzhang/01Acdemics/PhD/Research/Datasets/Burgmuller/b-02-annot.mid", burgmuller=True)
+    if not p.in_folder.exists():
+        print('in_folder does not exist')
+        sys.exit()
+
+    pathlib.Path(p.run_id).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(os.path.join(p.run_id, p.out_folder)).mkdir(parents=True, exist_ok=False)
+    for fn_mid in tqdm.tqdm(p.in_folder.glob('*/*.mid')):
+        try:
+            mk = Mistaker(fn_mid)
+            payload = mk.mistake_scheduler()
+            mk.change_tracker.get_target_miditrack(os.path.join(p.run_id, p.out_folder, '{}-tgt.mid'.format(fn_mid.stem)))
+            mk.change_tracker.get_src_miditrack(os.path.join(p.run_id, p.out_folder, '{}-src.mid'.format(fn_mid.stem)))
+            mk.change_tracker.get_label_miditrack(os.path.join(p.run_id, p.out_folder, '{}-label.mid'.format(fn_mid.stem)))
+            payload_to_csv(payload, os.path.join(p.run_id, p.out_folder, '{}-label.csv'.format(fn_mid.stem)))
+            timemap_to_csv(mk.change_tracker.get_timemap(), os.path.join(p.run_id, p.out_folder, '{}-mistake_timemap.csv'.format(fn_mid.stem)))
+
+        except OSError:
+            pass
+

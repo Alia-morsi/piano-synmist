@@ -257,9 +257,10 @@ class lowlvl:
         self._shift_labels(src_time_from, (src_time_from - src_time_to))
         self._label_note(time_in_tgtna, time_in_tgtna + (src_time_from - src_time_to), "time_shift", midlvl_label)
 
-        if (src_time_from - src_time_to) > 1:
-            import pdb
-            pdb.set_trace()
+        #TODO: DEBUG THIS LABEL ERROR :()
+        #if (src_time_from - src_time_to) > 1:
+        #    import pdb
+        #    pdb.set_trace()
 
         #change the grid so that src_time_to (where we want to return to) now points to our new
         #starting point (which was src_time_from)
