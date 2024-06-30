@@ -1,7 +1,6 @@
 import partitura as pt
 import numpy as np
 import numpy.lib.recfunctions as rfn
-import hook
 
 class RegionClassifier():
     def __init__(self, performance_path, burgmuller=False, save=True):
