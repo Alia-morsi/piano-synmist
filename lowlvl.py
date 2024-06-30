@@ -13,6 +13,7 @@ MID_MISTOUCH = 28      #E1
 MID_WRNG_PRED_INS = 30 #F#1
 MID_DRAG = 33          #A1
 
+
 LOW_INSERT = 1 #C#-1
 LOW_DELETE = 3 #D#-1
 LOW_GOBACK = 5 #F-1
@@ -22,6 +23,25 @@ LOW_CHG_ONSET = 11 #B-1
 
 DEFAULT_MID = 20 #G#0
 DEFAULT_LOW = 0  #C-1
+
+mid_lvl_opers = {
+    'MID_FWDBCKWD': MID_FWDBCKWD,
+    'MID_ROLLBACK': MID_ROLLBACK,
+    'MID_MISTOUCH': MID_MISTOUCH,
+    'MID_WRNG_PRED_INS': MID_WRNG_PRED_INS,
+    'MID_DRAG': MID_DRAG,
+    'DEFAULT_MID': DEFAULT_MID,
+}
+
+low_lvl_opers = {
+    'LOW_INSERT': LOW_INSERT,
+    'LOW_DELETE': LOW_DELETE,
+    'LOW_GOBACK': LOW_GOBACK,
+    'LOW_SHIFT': LOW_SHIFT,
+    'LOW_CHG_OFFSET': LOW_CHG_OFFSET,
+    'LOW_CHG_ONSET': LOW_CHG_ONSET,
+    'DEFAULT_LOW': DEFAULT_LOW,
+}
 
 mid_label_pitch_map = {
     'fwdbackwd' : MID_FWDBCKWD, 
@@ -327,4 +347,12 @@ class lowlvl:
         midiobj = self._na_to_miditrack(self.tgt_na)
         midiobj.write(loc)
         return
+    
+    def get_src_miditrack(self, loc):
+        midiobj = self._na_to_miditrack(self.src_na)
+        midiobj.write(loc)
+        return
+    
+    def get_timemap(self):
+        return zip(self.time_from, self.time_to)
     
