@@ -2,14 +2,24 @@ import pretty_midi
 import os
 import sys
 import glob
+import csv
 
 
 tempo_slowdown_mapping = {
-    (0, 60): 10,   # 0-60 BPM -> 10% slowdown
-    (61, 120): 20,  # 61-120 BPM -> 20% slowdown
-    (121, 180): 30, # 121-180 BPM -> 30% slowdown
-    (181, 240): 40  # 181-240 BPM -> 40% slowdown
+    (0, 40): 10,   # 0-60 BPM -> 10% slowdown
+    (41, 80): 15,
+    (81, 110): 25,  # 61-120 BPM -> 20% slowdown
+    (111, 130): 40, # 121-180 BPM -> 30% slowdown
+    (131, 180): 40, # 121-180 BPM -> 30% slowdown
+    (181, 240): 50  # 181-240 BPM -> 40% slowdown
 }
+
+def save_slowdowns_to_csv(slowdowns, output_file):
+    with open(output_file, 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Time', 'Slowdown_Percentage'])
+        for time, slowdown in slowdowns:
+            writer.writerow([time, slowdown])
 
 def get_tempo_at_time(time, tempo_times, tempi):
     for i in range(len(tempo_times) - 1):
@@ -26,6 +36,10 @@ def get_slowdown_percentage(tempo, tempo_slowdown_mapping):
 def slow_down_midi(input_file, output_file, tempo_slowdown_mapping):
     midi_data = pretty_midi.PrettyMIDI(input_file)
     tempo_times, tempi = midi_data.get_tempo_changes()
+
+    #temporary for now:
+    if len(tempo_times) > 1:
+        return []
     
     applied_slowdowns = []  # To store the applied slowdowns for each note/event
 
@@ -53,6 +67,7 @@ def slow_down_midi(input_file, output_file, tempo_slowdown_mapping):
     # Adjust the timing of all tempo changes
     adjusted_tempo_times = [time * (1 + get_slowdown_percentage(get_tempo_at_time(time, tempo_times, tempi), tempo_slowdown_mapping) / 100.0) for time in tempo_times]
     
+    print(adjusted_tempo_times)
     #what about the tempo change value...
     for tempo_time, adjusted_tempo_time in zip(tempo_times, adjusted_tempo_times): 
         if tempo_time == 0:
@@ -154,6 +169,31 @@ def process_files(input_dir, output_dir, slowdown_percentage):
             slow_down_annotations(annotation_file, output_annotation_file, applied_slowdowns)
             print(f"Processed annotation file: {annotation_file}")
     
+        slowdown_csv_file = os.path.join(output_dir, filename.replace(".mid", "_slowdowns.csv"))
+        save_slowdowns_to_csv(applied_slowdowns, slowdown_csv_file)
+        print(f"Saved slowdowns to: {slowdown_csv_file}")
+
+def process_asap(asap_root, output_root):
+    def is_leaf_folder(folder_path):
+        # Check if the folder contains both .midi and _annotations.csv files
+        has_midi = any(file.endswith('.mid') for file in os.listdir(folder_path))
+        has_annotations = any(file.endswith('_annotations.txt') for file in os.listdir(folder_path))
+        return has_midi and has_annotations
+
+    def find_leaf_folders(root_folder):
+        leaf_folders = []
+        for dirpath, dirnames, filenames in os.walk(root_folder):
+            if is_leaf_folder(dirpath):
+                leaf_folders.append(dirpath)
+        return leaf_folders
+
+    leaf_folders = find_leaf_folders(asap_root)
+    for leaf_folder in leaf_folders:
+        #calculate the output folder
+        relative_portion = os.path.relpath(leaf_folder, asap_root)
+        input_midi_path = leaf_folder
+        output_midi_path = os.path.join(output_root, relative_portion)
+        process_files(input_midi_path, output_midi_path, tempo_slowdown_mapping)
 
 if __name__ == '__main__':
     if len(sys.argv) < 4:
