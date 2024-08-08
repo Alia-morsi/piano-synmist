@@ -86,23 +86,27 @@ regular_na_fields = [('onset_sec', '<f4'), ('duration_sec', '<f4'), ('onset_tick
 # group_mid (start, end), and would merge the notes of the same mid level event into 1.
 
 class lowlvl:
-    def __init__(self, src_na):
+    def __init__(self, src_na, ts_annot=[]):
         #the labels would be maintained wrt to timeto or the tgt_na 
         #target = using the nearest giventime, get the timeto. In thoery, all existing score notes will
         #have a timefrom value in the safe zones.
+        #ts_annot = time series annotation
         #TODO: if src is an empty note array, fail and exit
 
         start = src_na['onset_sec'][0]
         end = src_na['onset_sec'][-1]+ src_na['onset_sec'][-1]
-        self.time_from = np.linspace(start, end, int(math.ceil(end)-math.ceil(start))*20) #not sure of resolution.. 
+        self.time_from = np.linspace(start, end, int(math.ceil(end)-math.ceil(start))*40) #not sure of resolution.. 
         self.time_to = self.time_from.copy()
-        
+
+        self.repeat_tracker = {} #dictionary to hold the time_from -> time_to mappings for performance regions that will be removed
+        self.ts_annot = ts_annot
+
         self.onsets = src_na['onset_sec']
         self.src_na = src_na
         self.tgt_na = copy.deepcopy(self.src_na)
         self.label_na = np.zeros(0, dtype=label_na_fields)
 
-        self.time_res = 0.05 #mostly used for the time_offset calculation.. let's see.
+        #self.time_res = 0.05 #mostly used for the time_offset calculation.. let's see.
 
         #This index points to the note item you are standing at
         self.src_idx = 0
@@ -285,6 +289,13 @@ class lowlvl:
         #change the grid so that src_time_to (where we want to return to) now points to our new
         #starting point (which was src_time_from)
         nearestIdx_src_time_to = np.fabs(self.time_from - src_time_to).argmin()
+
+        #save the initial src indexes to recover their ground truths
+        #the key should be unique, so in theory this shouldn't crash
+        self.repeat_tracker[(self.time_to[nearestIdx_src_time_to],
+                              self.time_to[nearestIdx_src_time_from])] = (self.time_to[nearestIdx_src_time_to:nearestIdx_src_time_from+1], 
+                                  self.time_from[nearestIdx_src_time_to:nearestIdx_src_time_from+1])
+
         self.time_to[nearestIdx_src_time_to:] += (src_time_from - src_time_to)     
         #what happens to the labels in that case. they should be aligned with tgt_na they should accomodate for the same shift applied.. 
 
@@ -301,8 +312,7 @@ class lowlvl:
         #the timefrom array would be set to 0 at these parts of the score that are skipped.
 
         return
-    
-    
+      
     def time_offset(self, src_time, offset_time, midlvl_label): #adding silence without note insertions..
         #perhaps we shouldn't add a 1 to the index because the caller should handle making the time
         #input as the time where the offset literally would start..
@@ -355,4 +365,57 @@ class lowlvl:
     
     def get_timemap(self):
         return zip(self.time_from, self.time_to)
+    
+    def get_repeats(self):
+        return self.repeat_tracker
+    
+    def get_adjusted_gt(self):
+        #check the format of the gt (needs to be a 1d array with some values)
+        #we want gt to map to the tgt_na timings.
+
+        #for every timing in the annotation, 
+        #for t in self.ts_annot:
+            #get all time_froms before t
+        #    before_t = [i for i in self.time_from if i < t]
+        #    if len(before_t) == 0:
+
+        #    else:
+        #        nearestIdx = np.fabs(before_t - t).argmin()
+
+        #    interpol_t = np.interp(np.array([t]), time_from[nearestIdx], time_to[nearestIdx])
+            #then, interpolate annotation timing to a timeto with a function from time_from[nearestidx] to time_to[nearestIdx]
+
+        #the above could be an overkill
+        #first try the usual interpolation
+
+        interpol_t = np.interp(self.ts_annot, self.time_from, self.time_to)
+
+        #then, go over the repeats to handle the discontinuities:
+        # for every tgt_time from to tgt_time to in the repeats
+        interpol_repeats = []
+        for key, val in self.repeat_tracker.items():
+            tgt_time_start, tgt_time_end = key #guess those were unused because we just got the whole array
+            tgt_time, src_time = val
+            # get the ground truth labels corresponding to the the range src_time[0], src_time[1]
+            
+            #we could be pedantic and only get the annot_indexfrom to be after the src_time[0]
+            # but I don't think having a repeated annotation would be a disaster.
+            annot_indexfrom = np.fabs(self.ts_annot - src_time[0]).argmin()
+            annot_indexto = np.fabs(self.ts_annot - src_time[-1]).argmin()
+
+            annotations = np.interp(self.ts_annot[annot_indexfrom:annot_indexto+1], 
+                                    src_time, tgt_time)
+            interpol_repeats.extend(annotations)
+            #interpolate every gt in source time to an equiv in that old tgt time
+            #append it to the same array
+        
+        #sort all the labels (because we added the repeats at the end.)
+        np.concatenate((interpol_t, np.array(interpol_repeats)))
+        interpol_t.sort()
+
+        #et. voila!
+        return interpol_t
+    
+        #prob. not needed: if this index is within the resolution from the original time (which probably we should save in the class params)
+
     
