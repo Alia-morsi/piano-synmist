@@ -1,11 +1,11 @@
 # Simulating Piano Performance Mistakes for Music Learning
 
-This is the repository of SynMist, containing the synthesized mistake dataset as well as python scripts that generates the mistakes in a taxonomical way. ```mistake_by_type.py``` and ```lowlvl.py``` contains functions regarding to the mid-level mistake scheduler and low-level deviation functions. ```region_classifier.py``` contains the simple texture \ technique region identifier. 
+This is the repository of SynMist, containing the synthesized mistake dataset as well as python scripts that generates the mistakes in a taxonomical way. ```simulate_mistakes.py``` and ```lowlvl.py``` contains functions regarding to the mid-level mistake scheduler and low-level deviation functions. ```region_classifier.py``` contains the simple texture \ technique region identifier. 
 
 
 ### Generating mistakes 
 ```
-python mistake_by_type.py <input_midi_folder> <output_midi_folder> <run_id>
+python simulate_mistakes.py <input_midi_folder> <output_midi_folder> <run_id>
 ```
 This processes all midi performance files in <input_midi_folder>, applies mistakes to them, and saves the files in <run_id>/<output_midi_folder>
 
@@ -30,4 +30,8 @@ For interviews with piano teachers, we have put the evaluated samples into an [o
 <!-- The synthetic mistake MIDI dataset can be found in ```SynMist``` folder.  -->
 
 ![plot](asset/symist_statistics.png)
+
+## Modifying datasets with time-based labels and obtaining new gt.
+
+Following the examples to adapt ASAP and AMAPS, create a similar one for whichever dataset as long as it is possible to extract a 1d array of timevalues representing the locations of the annotations.
 
