@@ -391,7 +391,7 @@ if __name__ == '__main__':
     else:
         filelist = [zip(i , []) for i in p.in_folder.glob('*/*.mid')] #this will ofc be specific to the given data folder
 
-    for (fn_mid, ts_annot) in tqdm.tqdm(filelist):
+    for (fn_mid, ts_annot) in tqdm.tqdm(filelist): #maybe this will crash if it is from the non ASAPLoader path.
         try:
             mk = Mistaker(fn_mid, ts_annot)
             payload = mk.mistake_scheduler()

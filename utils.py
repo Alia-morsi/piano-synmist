@@ -5,6 +5,7 @@ import pathlib
 import csv
 import ast
 import numpy as np
+from math import ceil, floor
 
 #todo: function to synthesize the midi using fluidsynth and just return it as a data obj, rather than having to do these file reads/writes
 
@@ -41,7 +42,8 @@ def slice_prettymidi(pretty_midi_obj, start_time, end_time):
         if start_time <= time < end_time]
     return new_pretty_midi
 
-
+#returns a dtype object that follows the dtype_str given. This is to help us serialize the saved mistakes.
+#might not be needed with our new way for parsing the lines
 def parse_mistake_labels_dtype(dtype_str):
     """Parse the dtype from the string."""
     dtype_items = []
@@ -56,36 +58,85 @@ def parse_mistake_labels_dtype(dtype_str):
     return np.dtype(dtype_items)
 
 def parse_mistake_labels_file(file_path):
-    parsed_arrays = []
     metadata = []  # This will store the time and label values
     dtype = None
 
-    with open(file_path, 'r') as file:
-        for line in file:
-            # Extract the time and label
-            time_str, label_str, rest = line.split(',', 2)
-            time_value = float(time_str.strip("[]"))
-            label_value = label_str.strip()
-            # Extract the params part (dictionary) from the line
-            start_idx = rest.index("{")
-            params_str = rest[start_idx:]
-            # Convert the string representation to an actual Python dictionary
-            params_dict = ast.literal_eval(params_str)
-            # Extract the 'note' array and the dtype information
-            note_array = params_dict['note']
+    def parse_entry(entry_lines):
+        # Join the accumulated lines into one single string
+        entry_str = ' '.join(entry_lines)
+    
+        # Split the string to extract the time, label, and params
+        time_part, label_part, params_part = entry_str.split(',', 2)
+    
+        # Clean up the time and label
+        time = float(time_part.strip('[]'))
+        label = label_part.strip()
+    
+        # Safely evaluate the params dictionary
+        params_str = ast.literal_eval(params_part.strip())
+        params_str = params_str.strip('"')
+        #params = ast.literal_eval(params_str)
+        #UNSAFE FUNCTION: 
+        params = eval(params_str, {'array': np.array})
+    
+        # Extract 'note' and 'dtype' from params
+        note = params.get('note')
+        dtype = note.dtype if note is not None else None
 
-            if dtype is None:
-                dtype_info = str(note_array.dtype)
-                dtype = parse_mistake_labels_dtype(dtype_info)
+        # Return the structured data
+        return {
+            'time': time,
+            'label': label,
+            'note': note,
+            'dtype': dtype
+        }
 
-            # Convert the array to a numpy array with the correct dtype
-            note_np_array = np.array(note_array, dtype=dtype)
-            # Append the numpy array to the list
-            parsed_arrays.append(note_np_array)
-            # Append the time and label to the metadata list
-            metadata.append((time_value, label_value))
+    def parse_file(file_path):
+        #these are 3 parallel arrays
+        dtype = None
+        tgt_times = []
+        tgt_labels = []
+        
+        with open(file_path, 'r') as file:
+            header_line = next(file)
+            current_entry = []
+            for line in file:
+                # Start accumulating a new entry when we hit a new "time, label, params"
+                if line.startswith('['):
+                    # Process the last entry before moving to a new one
+                    if current_entry:
+                        entry = parse_entry(current_entry)
+                        if dtype is None:
+                            dtype = entry['dtype']
+                            tgt_notes= np.zeros(0, dtype=dtype)
 
-    return parsed_arrays, metadata
+                        tgt_notes = np.concatenate((entry['note'], tgt_notes))
+                        tgt_times.append(entry['time'])
+                        tgt_labels.append(entry['label'])
+
+                    # Reset the entry accumulator
+                    current_entry = [line.strip()]
+                else:
+                    # Continue accumulating lines for the current entry
+                    current_entry.append(line.strip())
+        
+            # Process the last accumulated entry after the loop ends
+            if current_entry:
+                entry = parse_entry(current_entry)
+                if dtype is None:
+                    dtype = entry['dtype']
+                    tgt_notes= np.zeros(0, dtype=dtype)
+                            
+                tgt_notes = np.concatenate((entry['note'], tgt_notes))   
+                tgt_times.append(entry['time'])
+                tgt_labels.append(entry['label'])
+    
+        tgt_notes.sort(order='onset_sec')
+        return tgt_notes, np.array(tgt_times), np.array(tgt_labels)
+    
+    entries = parse_file(file_path)
+    return entries
+    
 
 def payload_to_csv(payload, fileout):
     fields = ['time', 'label', 'params']
@@ -127,6 +178,8 @@ def csv_to_timemap(filein):
             # Skip empty rows
             if not row:
                 continue
+            if row[0] == 'timefrom':
+                continue
             
             # Detect repeat section
             if row[0].startswith("Repeat"):
@@ -152,37 +205,61 @@ def csv_to_timemap(filein):
     
     return time_map, repeat_tracker
 
-class GT:
-    def __init__(self, src_ts_label, tgt_ts_label):
-        self.src_ts_label = np.loadtxt(src_ts_label)
-        self.tgt_ts_label = np.loadtxt(tgt_ts_label)
-        return
+#class GT: #keeps track of a time series ground truth before and after applying mistakes
+#    def __init__(self, src_ts_label, tgt_ts_label):
+#        self.src_ts_label = np.loadtxt(src_ts_label)
+#        self.tgt_ts_label = np.loadtxt(tgt_ts_label)
+#        return
     
-    def get_equiv_src_labels(self, tgt_labels, timemap, repeats):
+ #   def get_equiv_src_labels(self, tgt_labels, timemap, repeats):
+        #labels is an array of timestamp - 
         #check timemap for tgt
         #if failed
         #check repeats for tgt
         #repeat the matching src
-        return
+#        return
+
+def load_filenames(filename, root):
+    return {
+        'src_perf': os.path.join(root, '{}-src.mid'.format(filename)),
+        'tgt_perf': os.path.join(root, '{}-tgt.mid'.format(filename)), 
+        'mistake_timemap': os.path.join(root, '{}-mistake_timemap.csv'.format(filename)), 
+        'mistakelabel_csv': os.path.join(root, '{}-label.csv'.format(filename)), 
+        'mistakelabel_midi': os.path.join(root, '{}-mistake-label.mid'.format(filename)),
+        'src_gt_label': os.path.join(root, '{}src-gt-label.csv'.format(filename)),
+        'tgt_gt_label': os.path.join(root, '{}tgt-gt-label.csv'.format(filename))
+    }
     
 class SynmistPerformance:
     #loads the info of a single synmist performance with modified GT
-    def __init__(self, src_perf, tgt_perf, mistakelabel_csv, mistake_timemap, mistakelabel_midi):
-        self.tgt_mistakelabels_csv = parse_mistake_labels_file(mistakelabel_csv)
+    def __init__(self, src_perf, tgt_perf, mistakelabel_csv, mistake_timemap, mistakelabel_midi, src_gt_label, tgt_gt_label):
+        (self.tgt_mistakelabel_notes, 
+        self.tgt_mistakelabel_time, 
+        self.tgt_mistakelabel_label) = parse_mistake_labels_file(mistakelabel_csv)
         self.tgt_mistakelabel_midi = pretty_midi.PrettyMIDI(mistakelabel_midi)
         self.tgt_performance = pretty_midi.PrettyMIDI(tgt_perf)
         self.src_perf = pretty_midi.PrettyMIDI(src_perf)
         self.mistake_timemap = csv_to_timemap(mistake_timemap)
+        #to add later the src_gt and tgt_gt labels
         return
     
     def get_mistake_windows(self, recovery_buffer, mistake_types):
-        #return the mistake windows
+        mistake_centers = {}
+        mistake_windows = {}
+        for mistake_type in mistake_types:
+            indexes = np.where(self.tgt_mistakelabel_label == mistake_type)
+            mistake_centers[mistake_type] = self.tgt_mistakelabel_time[indexes]
+            mistake_windows[mistake_type] = [(max(0, i-floor(recovery_buffer/2.0)), min(i+ceil(recovery_buffer/2.0), self.tgt_performance.get_end_time()))
+                                             for i in mistake_centers[mistake_type]]
+            
+        #return the mistake windows in a list, with the mistake centered within a recovery buffer
         #return around them the time of the recovery buffers
         #get the same ones in the src array too
         #get them as just time arrays
         return
     
     def get_src_equivalent(self, tgt_time):
+
         return
     
     def get_src_data(self, src_times):
@@ -212,7 +289,6 @@ def get_window_info(stem, seconds_start, seconds_end):
     #print the src with red lines in the mistake insertion points
     #print the target with note additions in red? (or just the span of the mistake)
     #return a list of mistakes and their start points
-
     #should return the length of contiguous mistake areas for the data.
     return
 
