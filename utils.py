@@ -258,9 +258,48 @@ class SynmistPerformance:
         #get them as just time arrays
         return
     
-    def get_src_equivalent(self, tgt_time):
+    #tgt_times should be an array of the time window we want to obtain a src equivalent for.
+    #we should check entry by entry in the array, and get the nearest point before it if it's > 0+the threshold.
+    #and return till the first entry which is within timeto+search_resolution_ms. 
+    def get_src_equivalent(self, tgt_times, search_resolution_ms):
+        #i think for now i'll just ignore the search_resolution_ms..
+        timeto = [timeto for (timefrom, timeto) in self.mistake_timemap[0]]
+        timefrom = [timefrom for (timefrom, timeto) in self.mistake_timemap[0]]
 
-        return
+        tgt_time_out = [] 
+        src_time_out = []
+
+        for t in tgt_times:
+            #check the main map and each of the repeats for the nearest index
+            #each tgt time can lead to just one score time, but not vice versa. 
+            closest_value = -1 #since we cannot have negative time
+            closest_value_idx = None
+            repeat = 0 #this is to keep track of which repeat id (or none) had the closest value.
+
+            nearest_tgt_idx = np.fabs(t - timeto).argmin() #should be the one greater but for now whatev.
+            closest_value = timeto[nearest_tgt_idx]
+            closest_value_src = timefrom[nearest_tgt_idx]
+
+            repeats = {} #holds the nearest_tgt_idx per each repeatmap
+
+            for repeatid, repeat_map in self.mistake_timemap[1].items():
+                timeto_repeat = [timeto for (timefrom, timeto) in repeat_map]
+                timefrom_repeat = [timefrom for (timefrom, timeto) in repeat_map]
+                repeats[repeatid] = np.fabs(t - timeto).argmin()
+                if abs(t - timeto[repeats[repeatid]]) < abs(t-closest_value): 
+                    closest_value = timeto_repeat[repeats[repeatid]]
+                    closest_value_src = timefrom_repeat[repeats[repeatid]]
+                    repeat = repeatid
+
+            tgt_time_out.append(closest_value)
+            src_time_out.append(closest_value_src)
+
+            #at the end of this,
+            #repeat would tell whether this is from a repeated part or not. 0 if not, yes if greater
+            #and repeats[repeatid] tells which is the closest index to t we are trying to find.
+            #this code can definitely be more efficient, but i'm sticking to this mediocrity for now.
+
+        return tgt_time_out, src_time_out
     
     def get_src_data(self, src_times):
         return
