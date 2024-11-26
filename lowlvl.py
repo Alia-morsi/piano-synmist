@@ -389,6 +389,7 @@ class lowlvl:
         #first try the usual interpolation
 
         interpol_t = np.interp(self.ts_annot, self.time_from, self.time_to)
+        
 
         #then, go over the repeats to handle the discontinuities:
         # for every tgt_time from to tgt_time to in the repeats
