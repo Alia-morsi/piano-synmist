@@ -43,6 +43,12 @@ def print_payload_list(payload):
     for p in payload:
         print_payload_item(p)
 
+#options for setting mistakes
+#1. based on a probability table (what is there currently).  
+#make a tag with the status of the code right after the SMC conference (mid-july).
+#2. based on finding difficulty predictions (dimension based ones - Ramoneda et al.) and setting hypothesis for which errors exist at which portions --> the probabilities would be presumed by us but then this can be learned. This could be executed externally, and then a file with the following mapping:
+# time from - time to: difficulty aspect (there should be an unspecified option, to allow interoperability)
+#3. based on giving a time value or a note id (partitura), and the types of mistakes that we want there. 
 
 class Mistaker():
     def __init__(self, performance_path, time_series_annotation=None):
@@ -55,7 +61,6 @@ class Mistaker():
             performance_path (str): 
         """
         self.performance_path = performance_path
-        #self.performance = pt.load_performance(performance_path)
         self.performance = pt.load_performance(performance_path, pedal_threshold=127)
         self.time_series_annotation = time_series_annotation
 
@@ -108,10 +113,11 @@ class Mistaker():
         payload = []
         for mistake_type, n in n_mistakes.items():
             counter = 0
-            # turn the predefined probablity into an array to decide with texture region is chosen.
-            #why is p multiplied by 10
+            # gets the probability (value from 0:1) per texture group
+            # multiplies this probability by the number of mistakes?
+            # 
             sample_array = [[texture_group] * int(p * n_mistakes[mistake_type]) for texture_group, p in self.sampling_prob[mistake_type].items()]
-            sample_array = [y for x in sample_array for y in x]
+            sample_array = [y for x in sample_array for y in x] #this is to unpack the nested list.
 
             #check sample_array
             for i in range(0, n):
@@ -291,8 +297,6 @@ class Mistaker():
         #then, if the note being processed is close to the onset of the input note by 0.05
         #then drag the offset
         #and, shift notes.
-        #import pdb
-        #pdb.set_trace()
 
         #if within drag window:
         #we hardcode 1.0 as the maximum duration of any note.

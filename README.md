@@ -9,6 +9,19 @@ python simulate_mistakes.py <input_midi_folder> <output_midi_folder> <run_id>
 ```
 This processes all midi performance files in <input_midi_folder>, applies mistakes to them, and saves the files in <run_id>/<output_midi_folder>
 
+### Specifying the sampling probabilities
+sampling_prob.csv has several mistake types and their associated probabilities. The probabilities should be interpreted as: the probability of a mistake type per detected 'texture', assuming that it has already been decided that there will be a mistake at a note that is classified as belonging to this texture. This is crucial because we do not have a 'no mistake' probability. Consistent with the above description,
+ the rows should sum up to 1. (summing over the column doesn't make much sense).  
+
+The current set of values are not based on actual analysis..
+
+index,forward_backward_insertion,mistouch,pitch_change,drag
+is_double_note,0.4,0.3,0.1,0.2
+is_scale_note,0.3,0.4,0.3,0
+is_block_chords_note,0.2,0.1,0.4,0.2
+others,0.1,0.2,0.2,0.2
+
+
 
 ## Data
 The detailed analysis and annoation of individual mistakes from both datasets can be found [here](https://docs.google.com/spreadsheets/d/1QzKa0k5GlVt60PsUCvdDk8LiBAyWKOlPuEQl1Yf1ujA/edit#gid=0). 
