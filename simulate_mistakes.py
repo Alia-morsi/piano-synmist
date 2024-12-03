@@ -77,6 +77,27 @@ class Mistaker():
     def schedule_mistakes(self):
         self.mistake_scheduler()
 
+    def get_texture_group(self, note):
+        #in the current implementation, the texture group assignment is saved in the note itself (as per the region classifier implementation)
+        #also currently, the assignment to a texture group is exclusive
+        #TODO: change the use of names for the regions to some enum or so
+        texture_group = None
+        if note['is_block_chords_note'] == 1:
+            texture_group = 'is_block_chords_note'
+        elif note['is_scale_note'] == 1:
+            texture_group = 'is_scale_note'
+        elif note['is_double_note'] == 1:
+            texture_group = 'is_double_note'
+        elif note['others'] == 1:
+            texture_group = 'others'
+        
+        return texture_group
+    
+    def get_mistake_probability(self, texture):
+        mask = self.sampling_prob.index == texture
+        probability_index = np.where(self.sampling_prob.index == 'is_scale_note')[0][0]
+        return self.sampling_prob.iloc[probability_index]
+
     def black_white_keys(self):
         white_keys_all_octaves = []
         black_keys_all_octaves = []
@@ -99,56 +120,89 @@ class Mistaker():
 
         return white_keys_all_octaves, black_keys_all_octaves
 
-    ########### Function for scheduling mistakes #################
-    def mistake_scheduler(self, n_mistakes={
-                "forward_backward_insertion": 10,
-                "mistouch": 10,
-                "pitch_change": 10,
-                "drag": 10
-                #is it even possible to have numbers less than 10?
-            }):
-        """Based on heuristics and classified regions, create mistakes.
-            n_mistakes: the number of mistakes to add for each group. 
+    ########## Functions to directly apply mistakes #############
+    def insert_mistakes(self, types_and_locs):
+        """ 
+        types_and_locs is a dictionary of time, pitch, and the mistake type to be applied.
+        in lowlvl, all that's needed to identify a placement location is the time and the pitch, where 
+        time is the src time. 
+        TODO
         """
         payload = []
-        for mistake_type, n in n_mistakes.items():
-            counter = 0
-            # gets the probability (value from 0:1) per texture group
-            # multiplies this probability by the number of mistakes?
-            # 
-            sample_array = [[texture_group] * int(p * n_mistakes[mistake_type]) for texture_group, p in self.sampling_prob[mistake_type].items()]
-            sample_array = [y for x in sample_array for y in x] #this is to unpack the nested list.
 
-            #check sample_array
-            for i in range(0, n):
-                # generate the mistakes around the regions that's probable.
-                texture_sampler = np.random.random()
-                texture_group = sample_array[int(texture_sampler * len(sample_array))]
-                note = self.sample_group(self.na, texture_group)
+        rollback_dice = np.random.random()
 
-                if not len(note): # no note in this texture group. Remove this group from the sample_array so don't sample a next time.
-                    sample_array = list(filter(lambda a: a != texture_group, sample_array))
-                    continue
+        #if mistake_type == 'forward_backward_insertion':
+        #    # TODO: get the ascending parameter.
+        #    payload.append((note['onset_sec'], 'forward_backward_insertion', {'note': note, 'forward': np.random.random() > 0.5}))
+        #if mistake_type == 'mistouch':
+        #   payload.append((note['onset_sec'], 'mistouch', {'note': note,}))
+        #if mistake_type == 'pitch_change':
+        #    payload.append((note['onset_sec'], 'pitch_change', {'note': note,}))
+        #    if rollback_dice < rollback_association_prob['pitch_change']:
+        #       payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+        #if mistake_type == 'drag':
+        #   payload.append((note['onset_sec'], 'drag', {'note': note,}))
+        #    #doesn't make sense to add it after the first note of the drag.
+        #    #makes sense to add it after the whole drag window, but to return to
+        #    #the first note dragged.
+        #    if rollback_dice < rollback_association_prob['drag']:
+        #        payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
 
-                #to be filled with tupes as: function name, note, args dict
-                rollback_dice = np.random.random()   
+        #payload = sort_payload(payload)
 
-                if mistake_type == 'forward_backward_insertion':
-                    # TODO: get the ascending parameter.
-                    payload.append((note['onset_sec'], 'forward_backward_insertion', {'note': note, 'forward': np.random.random() > 0.5}))
-                if mistake_type == 'mistouch':
-                    payload.append((note['onset_sec'], 'mistouch', {'note': note,}))
-                if mistake_type == 'pitch_change':
-                    payload.append((note['onset_sec'], 'pitch_change', {'note': note,}))
-                    if rollback_dice < rollback_association_prob['pitch_change']:
-                        payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
-                if mistake_type == 'drag': 
-                    payload.append((note['onset_sec'], 'drag', {'note': note,}))
-                    #doesn't make sense to add it after the first note of the drag.
-                    #makes sense to add it after the whole drag window, but to return to 
-                    #the first note dragged.
-                    if rollback_dice < rollback_association_prob['drag']:
-                        payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+        #for i, p in enumerate(payload):
+        #    try:
+        #        self.__getattribute__(p[1])(**p[2])
+        #    except Exception as e:
+        #            print(e)
+        return payload
+
+        
+
+    ########### Function for scheduling mistakes #################
+    def mistake_scheduler(self, n_mistakes=30):
+        """
+        Generate mistakes by sampling notes directly and inserting mistakes
+        based on their texture and associated probabilities.
+
+        Parameters:
+        n_mistakes: Total number of mistakes to generate.
+    """
+        payload = []
+
+        # a note can be sampled more than once, bec. it should be possible for several mistakes to apply in the same place. 
+        sampled_notes = [self.sample_note(self.na) for _ in range(n_mistakes)]
+
+        for note in sampled_notes:
+            texture_group = self.get_texture_group(note)
+
+            #get probabilities for mistake types within this texture group
+            mistake_probabilities = self.get_mistake_probability(texture_group)
+            mistake_types, probabilities = zip(*mistake_probabilities.items())
+            probabilities = np.array(probabilities) / np.sum(probabilities)
+
+            mistake_type = np.random.choice(mistake_types, p=probabilities)
+
+            #to be filled with tuples as: function name, note, args dict
+            rollback_dice = np.random.random()   
+
+            if mistake_type == 'forward_backward_insertion':
+                # TODO: get the ascending parameter.
+                payload.append((note['onset_sec'], 'forward_backward_insertion', {'note': note, 'forward': np.random.random() > 0.5}))
+            if mistake_type == 'mistouch':
+                payload.append((note['onset_sec'], 'mistouch', {'note': note,}))
+            if mistake_type == 'pitch_change':
+                payload.append((note['onset_sec'], 'pitch_change', {'note': note,}))
+                if rollback_dice < rollback_association_prob['pitch_change']:
+                    payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+            if mistake_type == 'drag': 
+                payload.append((note['onset_sec'], 'drag', {'note': note,}))
+                #doesn't make sense to add it after the first note of the drag.
+                #makes sense to add it after the whole drag window, but to return to 
+                #the first note dragged.
+                if rollback_dice < rollback_association_prob['drag']:
+                    payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
 
         #payload_dtype = dtypes = [('start_time', 'U20'), ('data', 'O')]
         #payload = np.array(payload, dtype=), #consider, just to make the next line more readable
@@ -160,6 +214,10 @@ class Mistaker():
             except Exception as e:
                     print(e)
         return payload
+
+
+    def sample_note(self, data):
+        return data[np.random.choice(len(data), 1, replace=True)]
 
     def sample_group(self, data, group):
     #either returns a note belonging to a texture group, or 0 if it there aren't notes in this texture
@@ -393,7 +451,7 @@ if __name__ == '__main__':
     if p.ts_annot:
         filelist = ASAPLoader(p.in_folder)
     else:
-        filelist = [zip(i , []) for i in p.in_folder.glob('*/*.mid')] #this will ofc be specific to the given data folder
+        filelist = [(i._str , []) for i in p.in_folder.glob('*/*.mid')] #this will ofc be specific to the given data folder. we add an empty array to mimic an empty ts_annot
 
     for (fn_mid, ts_annot) in tqdm.tqdm(filelist): #maybe this will crash if it is from the non ASAPLoader path.
         try:
