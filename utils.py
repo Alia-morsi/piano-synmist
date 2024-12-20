@@ -6,6 +6,9 @@ import csv
 import ast
 import numpy as np
 from math import ceil, floor
+#display utils should be separated from other core utils so that synmist is not dependent on matplotlib (since it can cause clashes etc..)
+import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 
 #todo: function to synthesize the midi using fluidsynth and just return it as a data obj, rather than having to do these file reads/writes
 
@@ -137,7 +140,6 @@ def parse_mistake_labels_file(file_path):
     entries = parse_file(file_path)
     return entries
     
-
 def payload_to_csv(payload, fileout):
     fields = ['time', 'label', 'params']
     with open(fileout, 'w') as csv_out:
@@ -156,9 +158,9 @@ def timemap_to_csv(time_map, repeats, fileout):
             writer.writerow(row)
 
         repeat_number = 1
-        for (src_time_from, src_time_to), (from_times, to_times) in repeats.items():
+        for (tgt_time_lower, tgt_time_upper), (to_times, from_times) in repeats.items():
             writer.writerow([])  # Add an empty row for clarity between repeats
-            writer.writerow([f"repeat {repeat_number}:"])  # Add a header for each repeat
+            writer.writerow([f"Repeat {repeat_number}:"])  # Add a header for each repeat
             
             for t_from, t_to in zip(from_times, to_times):
                 writer.writerow([t_from, t_to])
@@ -239,11 +241,14 @@ class SynmistPerformance:
         self.tgt_mistakelabel_midi = pretty_midi.PrettyMIDI(mistakelabel_midi)
         self.tgt_performance = pretty_midi.PrettyMIDI(tgt_perf)
         self.src_perf = pretty_midi.PrettyMIDI(src_perf)
-        self.mistake_timemap = csv_to_timemap(mistake_timemap)
+        self.mistake_timemap_main, self.mistake_timemap_repeats = csv_to_timemap(mistake_timemap)
         #to add later the src_gt and tgt_gt labels
         return
     
     def get_mistake_windows(self, recovery_buffer, mistake_types):
+        #currently there is a mismatch between the names of the mistake_types in lowlvl.py and in simulate_mistakes.py. 
+        #we will make the caller follow the names in simulate_mistakes.py. 
+        
         mistake_centers = {}
         mistake_windows = {}
         for mistake_type in mistake_types:
@@ -254,9 +259,9 @@ class SynmistPerformance:
             
         #return the mistake windows in a list, with the mistake centered within a recovery buffer
         #return around them the time of the recovery buffers
-        #get the same ones in the src array too
+        #obviously they are all with respect to the tgt performance. to get their src equivalent, use the get_src_equivalent function 
         #get them as just time arrays
-        return
+        return mistake_windows, mistake_centers
     
     #tgt_times should be an array of the time window we want to obtain a src equivalent for.
     #we should check entry by entry in the array, and get the nearest point before it if it's > 0+the threshold.
@@ -302,7 +307,6 @@ class SynmistPerformance:
         return tgt_time_out, src_time_out
     
     def get_src_data(self, src_times):
-        
         return
     
     def get_tgt_time(self, tgt_times):
@@ -338,3 +342,51 @@ def get_mistake_info(stem, seconds_start, note=None):
     #
     return
     
+
+def show_warping_path(src_midi, tgt_midi, timemap, tgt_starttime=0, tgt_endtime=-1, display_pianoroll=True):
+    #tgt_midi is on the x-axis, src_midi is on the y-axis. 
+    #something in the repeats seems weird...
+
+    src_time = [t1 for t1, t2 in timemap]
+    tgt_time = [t2 for t1, t2 in timemap]
+
+    fig=plt.figure(figsize=(12, 12)) # Set the figure size
+
+    if display_pianoroll:
+        gridspecval=2
+        height_ratios=[3, 1]
+        time_array = np.array(time_array)
+        time_array = np.multiply(time_array, 100)
+    else:
+        gridspecval=1
+        height_ratios=[1]
+        
+    gs = GridSpec(gridspecval, 1, height_ratios=height_ratios, hspace=0.4)  # Adjust hspace for spacing
+
+    ax1 = fig.add_subplot(gs[0])
+    im1 = ax1.plot(tgt_time, src_time, color='green', label='Relationship Line', marker='o')
+    ax1.set_xlabel('tgt time (seconds)')
+    ax1.set_ylabel('src (seconds)')
+    ax1.set_title('Warping Path')
+
+    if display_pianoroll:
+        pitch_extent = [0, 128]
+        time_extent = [time_array[0], time_array[-1]]
+        ax2 = fig.add_subplot(gs[1], sharex=ax1)
+        im2 = ax2.imshow(tgt_midi, cmap='Blues', aspect='auto', origin='lower',
+                        extent=time_extent+pitch_extent)
+        
+        cbar2 = plt.colorbar(im2, ax=ax2, orientation='vertical', fraction=0.02, pad=0.04)
+        ax2.set_title('Pianoroll')
+        ax2.set_xlabel('Time (seconds)')
+        ax2.set_ylabel('Pitch (MIDI Notes)')
+    
+    # Show the plot
+    plt.tight_layout()
+    plt.show()
+    #(put the display functions)
+    #just do an imshow on the src and the target.
+    #plot the timemap colors in red
+    #plot the tgt underneath the x axis (since the xaxis will be the tgt)
+
+    return
