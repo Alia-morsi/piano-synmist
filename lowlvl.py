@@ -4,6 +4,7 @@ import math
 import numpy as np
 import copy
 import pretty_midi
+import os
 
 #MIDI Locations for the labels so that we can decipher what's being output.
 
@@ -99,6 +100,7 @@ class lowlvl:
         self.time_to = self.time_from.copy()
 
         self.repeat_tracker = {} #dictionary to hold the time_from -> time_to mappings for performance regions that will be removed
+                                 #the format is: (interval for tgt time region) -> ([target time points], [src time points])
         self.ts_annot = ts_annot
 
         self.onsets = src_na['onset_sec']
@@ -268,6 +270,7 @@ class lowlvl:
     #but for now we move on..
     def go_back(self, src_time_to, src_time_from, notes=[], midlvl_label="rollback"):
         #The variable names are hell.. time from and time to.. and src_time_from and src_time_to..
+        #note that, src_time_from will be larger than src_time_to, since we are going backwards
         #same for an offset (Shift) vs a note offset.. all confusing..
         #TODO: check that src_time_to < src_time_from
        
@@ -338,6 +341,24 @@ class lowlvl:
         midiobj.write(loc)
         return
     
+    def _filter_by_label(self, name, tier='mid'): #tier could be mid or low
+        if tier == 'mid':
+            return self.label_na[self.label_na['midlvl_label'] == name]
+        if tier == 'low':
+            return self.label_na[self.label_na['lowlvl_label'] == name]
+        return []
+    
+    #folder must already be created.
+    def get_midlevel_label_miditracks(self, folder):
+        #make sure the output folder exists, or create if it doesn't
+        os.makedirs(folder, exist_ok=True)
+        for midlvl_label in np.unique(self.label_na['midlvl_label']):
+            #filter self.label_na based on the midlevel label
+            #and get the low level operations that correspond to this midlevel label
+            #create an na from both.
+            self._na_to_miditrack(self._filter_by_label(name=folder, tier='mid')).write(os.path.join(folder, '{}.mid'.format(midlvl_label)))
+        return 
+    
     def _na_to_miditrack(self, na):
         midiobj = pretty_midi.PrettyMIDI()
         piano_program = pretty_midi.instrument_name_to_program('Acoustic Grand Piano')
@@ -367,35 +388,21 @@ class lowlvl:
         return zip(self.time_from, self.time_to)
     
     def get_repeats(self):
+        #Recall that the format is: (interval for tgt time region) -> ([target time points], [src time points]), unlike time map which we make src_time -> target_time
         return self.repeat_tracker
     
     def get_adjusted_gt(self):
         #check the format of the gt (needs to be a 1d array with some values)
         #we want gt to map to the tgt_na timings.
 
-        #for every timing in the annotation, 
-        #for t in self.ts_annot:
-            #get all time_froms before t
-        #    before_t = [i for i in self.time_from if i < t]
-        #    if len(before_t) == 0:
-
-        #    else:
-        #        nearestIdx = np.fabs(before_t - t).argmin()
-
-        #    interpol_t = np.interp(np.array([t]), time_from[nearestIdx], time_to[nearestIdx])
-            #then, interpolate annotation timing to a timeto with a function from time_from[nearestidx] to time_to[nearestIdx]
-
-        #the above could be an overkill
-        #first try the usual interpolation
-
+        #if the resolution of regular interpolation is insufficient, we could break it up by searching, for each annotation t, for the timefrom before and after it and interpolate based on that fragment only. 
         interpol_t = np.interp(self.ts_annot, self.time_from, self.time_to)
         
-
         #then, go over the repeats to handle the discontinuities:
         # for every tgt_time from to tgt_time to in the repeats
         interpol_repeats = []
         for key, val in self.repeat_tracker.items():
-            tgt_time_start, tgt_time_end = key #guess those were unused because we just got the whole array
+            tgt_time_start, tgt_time_end = key # guess those were unused because we just got the whole array
             tgt_time, src_time = val
             # get the ground truth labels corresponding to the the range src_time[0], src_time[1]
             
