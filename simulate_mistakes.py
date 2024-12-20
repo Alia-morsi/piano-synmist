@@ -119,47 +119,170 @@ class Mistaker():
             black_keys_all_octaves.extend(black_keys)
 
         return white_keys_all_octaves, black_keys_all_octaves
+    
+    ########## Interactive function to help us select the location and the type of mistake #######
+    def create_payload(self, parsed_list):
+        #creates the actual payload from the parsed list of note locations. 
+        #have to check that all the strings given for mistake types are actually supported or this code will crash badly.
+        #TODO: we should include the option of not specifying the mistake type exactly, so that the system can make the most appropriate choice.
 
-    ########## Functions to directly apply mistakes #############
-    def insert_mistakes(self, types_and_locs):
-        """ 
-        types_and_locs is a dictionary of time, pitch, and the mistake type to be applied.
-        in lowlvl, all that's needed to identify a placement location is the time and the pitch, where 
-        time is the src time. 
-        TODO
-        """
         payload = []
-
         rollback_dice = np.random.random()
 
-        #if mistake_type == 'forward_backward_insertion':
-        #    # TODO: get the ascending parameter.
-        #    payload.append((note['onset_sec'], 'forward_backward_insertion', {'note': note, 'forward': np.random.random() > 0.5}))
-        #if mistake_type == 'mistouch':
-        #   payload.append((note['onset_sec'], 'mistouch', {'note': note,}))
-        #if mistake_type == 'pitch_change':
-        #    payload.append((note['onset_sec'], 'pitch_change', {'note': note,}))
-        #    if rollback_dice < rollback_association_prob['pitch_change']:
-        #       payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
-        #if mistake_type == 'drag':
-        #   payload.append((note['onset_sec'], 'drag', {'note': note,}))
-        #    #doesn't make sense to add it after the first note of the drag.
-        #    #makes sense to add it after the whole drag window, but to return to
-        #    #the first note dragged.
-        #    if rollback_dice < rollback_association_prob['drag']:
-        #        payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+        for mistake_item in parsed_list:
+            start_time = mistake_item['start_time']
+            end_time = mistake_item['end_time']
+            pitch = mistake_item['pitch']
+            mistake_type = mistake_item['mistake_type']
 
-        #payload = sort_payload(payload)
+        #give the id of the first note that matches in the given time range. if not found, just choose a random one from within this time range.
+        #code is inefficient due to the repeated O(n) searching. 
+        notes_in_range = [note for note in self.na if note['onset_sec'] >= start_time and note['onset_sec'] <end_time]
+        note_match = None
+        for note in notes_in_range:
+            if note['pitch'] == pitch:
+                note_match = note
+        if note_match is None: 
+            note_match = notes_in_range[np.random.choice(len(notes_in_range), 1, replace=True)]
 
-        #for i, p in enumerate(payload):
-        #    try:
-        #        self.__getattribute__(p[1])(**p[2])
-        #    except Exception as e:
-        #            print(e)
+        note = note_match
+        if mistake_type == 'forward_backward_insertion':
+        # TODO: get the ascending parameter.
+            payload.append((note['onset_sec'], 'forward_backward_insertion', {'note': note, 'forward': np.random.random() > 0.5}))
+        if mistake_type == 'mistouch':
+            payload.append((note['onset_sec'], 'mistouch', {'note': note,}))
+        if mistake_type == 'pitch_change':
+            payload.append((note['onset_sec'], 'pitch_change', {'note': note,}))
+            if rollback_dice < rollback_association_prob['pitch_change']:
+               payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+        if mistake_type == 'drag':
+           payload.append((note['onset_sec'], 'drag', {'note': note,}))
+           if rollback_dice < rollback_association_prob['drag']:
+               payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+
+        payload = sort_payload(payload)
         return payload
-
+    
+    def interactive_mistake_locations(self):
+        """
+        Interactive function to perform the following:
+        1. Query notes corresponding to a time range.
+        2. Input notes and mistakes interactively.
+        3. Quit and display the accumulated mistakes.
+        """
+        def parse_mistake_string(input_string):
+            """Parses a semicolon-separated string of mistake data into a list of dictionaries."""
+            import re
         
+            pattern = re.compile(r"\((\d+(?:\.\d+)?),\s*(\d+(?:\.\d+)?)\)-(\d+)-([\w\-]+)")
+            parsed_list = []
+            syntax_errors = []
+        
+            units = input_string.split(';')
+            for i, unit in enumerate(units):
+                unit = unit.strip()
+                match = pattern.match(unit)
+                if match:
+                    s, e, midi_pitch, mistake_type = match.groups()
+                    parsed_list.append({
+                        's': float(s),
+                        'e': float(e),
+                        'pitch': int(midi_pitch),
+                        'mistake-type': mistake_type
+                    })
+                else:
+                    syntax_errors.append((i, unit))
+        
+            return parsed_list, syntax_errors
 
+        parsed_list = []
+        syntax_errors = []
+    
+        print("Welcome to the Interactive Mistake Editor!")
+    
+        while True:
+            print("Options:")
+            print("1. Query notes within a time range.")
+            print("2. Input mistake data.")
+            print("3. Quit.")
+            choice = input("\nEnter your choice (1/2/3): ").strip()
+
+            if choice == "1":
+                # Query notes in a time range
+                try:
+                    start_time = float(input("Enter start time (seconds): ").strip())
+                    end_time = float(input("Enter end time (seconds): ").strip())
+
+                    if start_time > end_time:
+                        print("Start time must be less than or equal to end time. Please try again.")
+                        continue
+                
+                    # Query the notes from self.na within the time range
+                    notes_in_range = [
+                        note for note in self.na 
+                        if note['onset_sec'] >= start_time and note['onset_sec'] <= end_time
+                    ]
+                
+                    if notes_in_range:
+                        print(f"Notes between {start_time}s and {end_time}s:")
+                        for note in notes_in_range:
+                            print(note)
+                    else:
+                        print(f"No notes found between {start_time}s and {end_time}s.")
+            
+                except ValueError:
+                    print("Invalid input. Please enter valid numerical values for start and end time.")
+        
+            elif choice == "2":
+                # Input mistake data
+                print("Enter mistake data in the format: (s, e)-<midi_pitch>-<mistake-type>;")
+                print("You can enter multiple mistakes separated by semicolons, or one at a time.")
+                print("Type 'done' when finished entering mistakes.")
+            
+                while True:
+                    user_input = input("Enter mistake data: ").strip()
+                    if user_input.lower() == "done":
+                        break
+                
+                    parsed_data, errors = parse_mistake_string(user_input)
+                    parsed_list.extend(parsed_data)
+                    syntax_errors.extend(errors)
+                
+                    if parsed_data:
+                        print(f"Successfully added {len(parsed_data)} mistakes.")
+                    if errors:
+                        print(f"Encountered {len(errors)} syntax errors. Errors:")
+                        for idx, error in errors:
+                            print(f"  Unit {idx + 1}: {error}")
+        
+            elif choice == "3":
+                # Quit and display accumulated mistakes
+                print("\nExiting the Mistake Editor.")
+                print("Final Mistake Data:")
+                for mistake in parsed_list:
+                    print(mistake)
+            
+                if syntax_errors:
+                    print("\nEncountered syntax errors:")
+                    for idx, error in syntax_errors:
+                        print(f"  Unit {idx + 1}: {error}")
+            
+                print("\nInput complete.")
+                break
+        
+            else:
+                print("Invalid choice. Please enter 1, 2, or 3.")
+        return parsed_list, syntax_errors
+   
+    def save_mistake_locations(self, types_and_locs, path):
+        #TODO: give the option to load a set of mistakes per time
+        #not sure if there is a need for this, or if the saving should just be done as per the lowlvl annotation style.
+        return
+
+    def load_mistake_locations(self, path):
+        types_and_locs = []
+        return types_and_locs
+    
     ########### Function for scheduling mistakes #################
     def mistake_scheduler(self, n_mistakes=30):
         """
@@ -168,7 +291,7 @@ class Mistaker():
 
         Parameters:
         n_mistakes: Total number of mistakes to generate.
-    """
+        """
         payload = []
 
         # a note can be sampled more than once, bec. it should be possible for several mistakes to apply in the same place. 
@@ -207,7 +330,9 @@ class Mistaker():
         #payload_dtype = dtypes = [('start_time', 'U20'), ('data', 'O')]
         #payload = np.array(payload, dtype=), #consider, just to make the next line more readable
         payload = sort_payload(payload)
-        
+        return payload
+
+    def apply_payload(self, payload):
         for i, p in enumerate(payload):
             try:
                 self.__getattribute__(p[1])(**p[2])
@@ -457,6 +582,7 @@ if __name__ == '__main__':
         try:
             mk = Mistaker(fn_mid, ts_annot)
             payload = mk.mistake_scheduler()
+            mk.apply_payload(payload)
 
             stem = os.path.split(os.path.splitext(fn_mid)[0])[1]
 
@@ -474,6 +600,8 @@ if __name__ == '__main__':
             mk.change_tracker.get_target_miditrack(os.path.join(out_folder, '{}-tgt.mid'.format(stem)))
             mk.change_tracker.get_src_miditrack(os.path.join(out_folder, '{}-src.mid'.format(stem)))
             mk.change_tracker.get_label_miditrack(os.path.join(out_folder, '{}-mistake-label.mid'.format(stem)))
+            mk.change_tracker.get_midlevel_label_miditracks(os.path.join(out_folder,'{}-labels_by_type'.format(stem)))
+
             if p.ts_annot:
                 adj_gt = mk.change_tracker.get_adjusted_gt()
                 src_gt = mk.change_tracker.ts_annot

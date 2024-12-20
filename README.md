@@ -8,6 +8,7 @@ This is the repository of SynMist, containing the synthesized mistake dataset as
 python simulate_mistakes.py <input_midi_folder> <output_midi_folder> <run_id>
 ```
 This processes all midi performance files in <input_midi_folder>, applies mistakes to them, and saves the files in <run_id>/<output_midi_folder>
+python simulate_mistakes.py --no_ts_annot '<path_prefix>/synthetic-mistake-study/data' repeat_test 'run11'
 
 ### Specifying the sampling probabilities
 sampling_prob.csv has several mistake types and their associated probabilities. The probabilities should be interpreted as: the probability of a mistake type per detected 'texture', assuming that it has already been decided that there will be a mistake at a note that is classified as belonging to this texture. This is crucial because we do not have a 'no mistake' probability. Consistent with the above description,
