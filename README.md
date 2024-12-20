@@ -1,5 +1,10 @@
 # Simulating Piano Performance Mistakes for Music Learning
 
+To use this software in academic publications, please cite the following paper:
+Morsi A, Zhang H, Maezawa A, Dixon S, Serra X. Simulating piano performance mistakes for music learning. Proceedings of the 21st Sound and Music Computing Conference SMC 2024; 2024 July 4-6; Porto, Portugal.
+
+for other uses, please see the included LICENSE file
+
 This is the repository of SynMist, containing the synthesized mistake dataset as well as python scripts that generates the mistakes in a taxonomical way. ```simulate_mistakes.py``` and ```lowlvl.py``` contains functions regarding to the mid-level mistake scheduler and low-level deviation functions. ```region_classifier.py``` contains the simple texture \ technique region identifier. 
 
 
@@ -24,7 +29,6 @@ is_double_note,0.4,0.3,0.1,0.2
 is_scale_note,0.3,0.4,0.3,0
 is_block_chords_note,0.2,0.1,0.4,0.3
 others,0.1,0.2,0.2,0.2
-
 
 
 ## Data
