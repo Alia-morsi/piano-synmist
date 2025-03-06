@@ -20,7 +20,13 @@ classifiers = [
 
 [project.urls]
 "Homepage" = "https://github.com/alia-morsi/piano-synmist"
-"Bug Tracker" = "https://github.com/yourusername/my-package/issues"
+"Bug Tracker" = "https://github.com/alia-morsi/piano-synmist/issues"
+
+[tool.setuptools]
+packages = ["piano_synmist"]
+py-modules = ["lowlvl", "simulate_mistakes", "utils", "region_classifier"]
 
 [tool.setuptools.package-dir]
 piano_synmist = "."
+
+
