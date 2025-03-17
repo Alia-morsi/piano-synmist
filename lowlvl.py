@@ -120,8 +120,8 @@ class lowlvl:
         low_label_pitch = low_label_pitch_map[lowlvl_label] if lowlvl_label in low_label_pitch_map else DEFAULT_LOW
 
         #add 2 notes, one mid and one low.
-        new_label = np.array([(start, end-start, mid_label_pitch, LABEL_VELOCITY, lowlvl_label, midlvl_label), 
-                              (start, end-start, low_label_pitch, LABEL_VELOCITY, lowlvl_label, midlvl_label)], dtype=self.label_na.dtype)
+        new_label = np.array([(start, end-start, mid_label_pitch, LABEL_VELOCITY, midlvl_label, lowlvl_label), 
+                              (start, end-start, low_label_pitch, LABEL_VELOCITY, midlvl_label, lowlvl_label)], dtype=self.label_na.dtype)
         self.label_na = np.concatenate((new_label, self.label_na))
         self.label_na.sort(order='onset_sec')
         return 
@@ -356,7 +356,7 @@ class lowlvl:
             #filter self.label_na based on the midlevel label
             #and get the low level operations that correspond to this midlevel label
             #create an na from both.
-            self._na_to_miditrack(self._filter_by_label(name=folder, tier='mid')).write(os.path.join(folder, '{}.mid'.format(midlvl_label)))
+            self._na_to_miditrack(self._filter_by_label(name=midlvl_label, tier='mid')).write(os.path.join(folder, '{}.mid'.format(midlvl_label)))
         return 
     
     def _na_to_miditrack(self, na):

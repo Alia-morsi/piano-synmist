@@ -576,7 +576,7 @@ if __name__ == '__main__':
     if p.ts_annot:
         filelist = ASAPLoader(p.in_folder)
     else:
-        filelist = [(i._str , []) for i in p.in_folder.glob('*/*.mid')] #this will ofc be specific to the given data folder. we add an empty array to mimic an empty ts_annot
+        filelist = [(i._str , []) for i in p.in_folder.glob('*/*/*.mid')] #this will ofc be specific to the given data folder. we add an empty array to mimic an empty ts_annot
 
     for (fn_mid, ts_annot) in tqdm.tqdm(filelist): #maybe this will crash if it is from the non ASAPLoader path.
         try:

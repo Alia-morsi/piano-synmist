@@ -1,7 +1,12 @@
 # Simulating Piano Performance Mistakes for Music Learning
 
-To use this software in academic publications, please cite the following paper:
+To use this software in academic publications, please cite according to the following:
+
+For the latest version, please write to morsi.alia(at)gmail(dot)com because the publication is under review. 
+
+Or, if you will only use the functionality described in 
 Morsi A, Zhang H, Maezawa A, Dixon S, Serra X. Simulating piano performance mistakes for music learning. Proceedings of the 21st Sound and Music Computing Conference SMC 2024; 2024 July 4-6; Porto, Portugal.
+please retract to the git tag smc_2024 and cite the latter publication. 
 
 for other uses, please see the included LICENSE file
 
