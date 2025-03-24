@@ -594,7 +594,9 @@ if __name__ == '__main__':
                 pathlib.Path(out_folder).mkdir(parents=True, exist_ok=True)
 
             else:
-                out_folder = os.path.join(p.out_folder, p.run_id)
+                relative_portion = os.path.relpath(os.path.dirname(fn_mid), p.in_folder)
+                out_folder = os.path.join(p.out_folder, p.run_id, relative_portion)
+                pathlib.Path(out_folder).mkdir(parents=True, exist_ok=True)
 
             #add ground truth boolean, and add the annotation file example. use ASAP for now since I have that already
             mk.change_tracker.get_target_miditrack(os.path.join(out_folder, '{}-tgt.mid'.format(stem)))
