@@ -72,16 +72,10 @@ regular_na_fields = [('onset_sec', '<f4'), ('duration_sec', '<f4'), ('onset_tick
                      ('pitch', '<i4'), ('velocity', '<i4'), ('track', '<i4'), ('channel', '<i4'), 
                      ('id', '<U256')]
 
-#order of applying the mistakes:
+#contemplate the order of applying the mistakes and if sorting is needed:
 #time based
-#then, if several at the same time: insert, delete, goback, offset,
-#actually it might not matter so much.. try without sorting first. 
-
-#btw if we want to delete after an insertion, and we give the same 'time' as the insertion, we should
-#make the extra step to check that we won't delete what we just inserted. (or not?). Anyway, ids would work 
-#in this case.
-
-#food for thought, should the label be the same for low level and mid level stuff?
+#then, if several at the same time: insert, delete, goback, offset.
+#what happens if we delete after an insertion, could we end up deleting what we just inserted?
 
 #TODO: have a function that merges mid_level labels done by the same 'event'. 
 # group_mid (start, end), and would merge the notes of the same mid level event into 1.
@@ -221,7 +215,7 @@ class lowlvl:
         return True
     
     def change_note_onset(self, src_time, pitch, onset_shift, midlvl_label, lowlvl_label):
-        #this would have a limit, because if it goes tooooo far, then it should be a deleted note in
+        #TODO: this would have a limit, because if it goes tooooo far, then it should be a deleted note in
         #this region, and a note insertion in the other..
         #this is for wiggles that make sense, without the need to change time_from or time_to.
         return
@@ -290,7 +284,7 @@ class lowlvl:
         #    pdb.set_trace()
 
         #change the grid so that src_time_to (where we want to return to) now points to our new
-        #starting point (which was src_time_from)
+        #starting point (which is src_time_from)
         nearestIdx_src_time_to = np.fabs(self.time_from - src_time_to).argmin()
 
         #save the initial src indexes to recover their ground truths
@@ -300,7 +294,7 @@ class lowlvl:
                                   self.time_from[nearestIdx_src_time_to:nearestIdx_src_time_from+1])
 
         self.time_to[nearestIdx_src_time_to:] += (src_time_from - src_time_to)     
-        #what happens to the labels in that case. they should be aligned with tgt_na they should accomodate for the same shift applied.. 
+        #the line above is because we want time_to at index nearestIdx_src_time_to skip the old execution, so we offset by the time difference between src_time_to(the earlier point)  and src_time_from (the later point). This would hold if the notes array is exactly the source notes with no modifications or delays or anything. what happens to the labels in that case? they should be aligned with tgt_na they should accomodate for the same shift applied. and in theory this has already been done earlier in the function 
 
         #append the notes at the correct time and sort
         for note in notes:

@@ -95,7 +95,7 @@ class Mistaker():
     
     def get_mistake_probability(self, texture):
         mask = self.sampling_prob.index == texture
-        probability_index = np.where(self.sampling_prob.index == 'is_scale_note')[0][0]
+        probability_index = np.where(self.sampling_prob.index == texture)[0][0]
         return self.sampling_prob.iloc[probability_index]
 
     def black_white_keys(self):
@@ -159,6 +159,8 @@ class Mistaker():
            payload.append((note['onset_sec'], 'drag', {'note': note,}))
            if rollback_dice < rollback_association_prob['drag']:
                payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+        if mistake_type =='rollback':
+            payload.append(note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)})
 
         payload = sort_payload(payload)
         return payload
@@ -284,13 +286,16 @@ class Mistaker():
         return types_and_locs
     
     ########### Function for scheduling mistakes #################
-    def mistake_scheduler(self, n_mistakes=30):
+    def mistake_scheduler(self, n_mistakes=80):
         """
         Generate mistakes by sampling notes directly and inserting mistakes
         based on their texture and associated probabilities.
 
         Parameters:
         n_mistakes: Total number of mistakes to generate.
+
+        for the paper: increased events_back_range for rollback to 10, and increased the default number of mistakes.
+        randomized the length of the hesitation pre-rollback. Also randomized the mistouch choice of note velocity.
         """
         payload = []
 
@@ -325,7 +330,7 @@ class Mistaker():
                 #makes sense to add it after the whole drag window, but to return to 
                 #the first note dragged.
                 if rollback_dice < rollback_association_prob['drag']:
-                    payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,5)}))
+                    payload.append((note['onset_sec'], 'rollback', {'note': note, 'events_back_range': (0,10)}))
 
         #payload_dtype = dtypes = [('start_time', 'U20'), ('data', 'O')]
         #payload = np.array(payload, dtype=), #consider, just to make the next line more readable
@@ -372,7 +377,7 @@ class Mistaker():
         #ends.
 
         #hesitation before repeating notes
-        hesitation = 0.2 #randomize
+        hesitation = np.random.uniform(0.2, 0.8) #randomize
         self.change_tracker.time_offset(note['onset_sec']+ note['duration_sec'], hesitation, 'rollback')
         self.change_tracker.go_back(onset_shift, note['onset_sec']+ note['duration_sec'], notes_to_repeat)
         return
@@ -430,7 +435,7 @@ class Mistaker():
 
         #TODO: Calculate duration and velocity in a sensible way
         duration = 0.2
-        velocity = 60
+        velocity = np.random.randint(30, 70)
 
         self.change_tracker.pitch_insert(note['onset_sec'], insert_pitch, duration, velocity, "mistouch")
         print(f"added mistouch insertion at note {note['id']} with pitch {insert_pitch}.")
@@ -464,7 +469,7 @@ class Mistaker():
 
         print(f"added pitch change at note {note['id']} with pitch {changed_pitch}.")
 
-    #Make the rhythm mistakes for tomorrow..
+    
     ########### Functions for rhythm mistakes ####################
     #range of dragtime is potentially parametrizable.
     def drag(self, note, drag_window=5):
