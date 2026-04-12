@@ -157,7 +157,7 @@ class lowlvl:
 
         idxs_to_include = [idx for idx, (timeto_sub, timefrom_sub) in enumerate(mapping_list) if start_of_timefrom_window in timefrom_sub]
        
-        ordered_keys_incl_src = np.array(keys_list)[idxs_to_include]
+        ordered_keys_incl_src = [keys_list[i] for i in idxs_to_include]
         return ordered_keys_incl_src, keys_list   #return sorted list of all the keys which include src, and all the sorted keys. 
         #the sorted keys (meaning that they are sorted by tgt_na start time), would help us determine which repeat pairs need temporal adjustments
 
@@ -196,9 +196,11 @@ class lowlvl:
                 #then we need to save the old repeat in the repeats structure:
                 self.repeat_tracker[(self.time_to[nearestIdx_new_notes_start], self.time_to[nearestIdx_new_notes_end])] = (self.time_to[nearestIdx_new_notes_start:nearestIdx_new_notes_end].copy(), self.time_from[nearestIdx_new_notes_start:nearestIdx_new_notes_end].copy())
             
-            #Just add the offset of the new_notes_start_time to the usual self.time_to, because we are just talking about an offset..
+            #Offset time_to so it maps to where the notes actually land in tgt_na.
+            #Notes were shifted by (-new_notes_start_time + insertion_offset),
+            #so time_to needs the same shift applied to time_from.
             self.time_to[nearestIdx_new_notes_start:nearestIdx_new_notes_end] = self.time_from[nearestIdx_new_notes_start:nearestIdx_new_notes_end].copy()
-            self.time_to[nearestIdx_new_notes_start:nearestIdx_new_notes_end] += new_notes_start_time
+            self.time_to[nearestIdx_new_notes_start:nearestIdx_new_notes_end] += (insertion_offset - new_notes_start_time)
     
     def _label_note(self, start, end, lowlvl_label, midlvl_label):
         mid_label_pitch = mid_label_pitch_map[midlvl_label] if midlvl_label in mid_label_pitch_map else DEFAULT_MID
@@ -232,9 +234,12 @@ class lowlvl:
             nearestIdx = np.fabs(self.time_from - src_time).argmin()
             time_in_tgtna = self.time_to[nearestIdx]
         else:
-           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index]]
+           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index - 1]]
            nearestIdx = np.fabs(time_from_subarray - src_time).argmin()
            time_in_tgtna = time_to_subarray[nearestIdx]
+
+        if time_in_tgtna == -1:
+            return
 
         mask = self.label_na['onset_sec'] >= time_in_tgtna
         self.label_na['onset_sec'][mask] += offset
@@ -253,11 +258,13 @@ class lowlvl:
             nearestIdx = np.fabs(self.time_from - src_time).argmin()
             tgt_insertion_time = self.time_to[nearestIdx]
         else:
-           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index]]
+           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index - 1]]
            nearestIdx = np.fabs(time_from_subarray - src_time).argmin()
            tgt_insertion_time = time_to_subarray[nearestIdx]
-        
-        #following the regular_na fields structure above.
+
+        if tgt_insertion_time == -1:
+            print('pitch_insert: src_time {:.3f} maps to unmapped region (time_to=-1), skipping'.format(src_time))
+            return
         #instead of using 0, we should convert the seconds time to tick time and initialize this properly....
         new_note = np.array([(tgt_insertion_time, duration, 0, 0, pitch, velocity, 0, 0, 'none')], dtype=self.tgt_na.dtype)
         self.tgt_na = np.concatenate((self.tgt_na, new_note))
@@ -274,9 +281,13 @@ class lowlvl:
             nearestIdx = np.fabs(self.time_from - src_time).argmin()
             time_in_tgtna = self.time_to[nearestIdx]
         else:
-           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index]]
+           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index - 1]]
            nearestIdx = np.fabs(time_from_subarray - src_time).argmin()
            time_in_tgtna = time_to_subarray[nearestIdx]
+
+        if time_in_tgtna == -1:
+            print('_find_note_in_tgt: src_time {:.3f} maps to unmapped region (time_to=-1)'.format(src_time))
+            return False, None, None
 
         window = 0.05 #a window 50 ms before and after for trying to find the onset of the pitch in question.
 
@@ -449,7 +460,7 @@ class lowlvl:
 
         if repeat_index == 0 or len(ordered_keys_incl_src) == 0:
             nearestIdx_src_time_from = np.fabs(self.time_from - src_time_from).argmin()
-            nearestIdx_src_time_to = np.fabs(self.time_to - src_time_to).argmin()
+            nearestIdx_src_time_to = np.fabs(self.time_from - src_time_to).argmin()
 
             tgt_time_from = self.time_to[nearestIdx_src_time_from]
             tgt_time_to = self.time_to[nearestIdx_src_time_to]
@@ -464,9 +475,9 @@ class lowlvl:
             #                      self.time_from[nearestIdx_src_time_to:nearestIdx_src_time_from+1])
 
         else:
-           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index]]
+           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index - 1]]
            nearestIdx_src_time_from = np.fabs(time_from_subarray - src_time_from).argmin()
-           nearestIdx_src_time_to = np.fabs(time_to_subarray - src_time_to).argmin()
+           nearestIdx_src_time_to = np.fabs(time_from_subarray - src_time_to).argmin()
 
            tgt_time_from = time_to_subarray[nearestIdx_src_time_from] 
            tgt_time_to = time_to_subarray[nearestIdx_src_time_to]
@@ -479,6 +490,10 @@ class lowlvl:
            #the key should be unique, so in theory this shouldn't crash
            #self.repeat_tracker[(tgt_time_to, tgt_time_from)] = (time_to_subarray[nearestIdx_src_time_to:nearestIdx_src_time_from+1],
            #                       time_from_subarray[nearestIdx_src_time_to:nearestIdx_src_time_from+1])
+
+        if tgt_time_from == -1 or tgt_time_to == -1:
+            print('go_back: src_time_to={:.3f} or src_time_from={:.3f} maps to unmapped region (time_to=-1), skipping'.format(src_time_to, src_time_from))
+            return
 
         tgt_time_to_apply_offset = tgt_time_from
         self._apply_warping_path_offsets(tgt_time_to_apply_offset, src_time_from - src_time_to) #we use src because we are offsetting to place the new repeat..
@@ -520,10 +535,13 @@ class lowlvl:
             nearestIdx = np.fabs(self.time_from - src_time).argmin()
             tgt_insertion_time = self.time_to[nearestIdx]
         else:
-           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index]]
+           (time_to_subarray, time_from_subarray) =  self.repeat_tracker[ordered_keys_incl_src[repeat_index - 1]]
            nearestIdx = np.fabs(time_from_subarray - src_time).argmin()
            tgt_insertion_time = time_to_subarray[nearestIdx]
 
+        if tgt_insertion_time == -1:
+            print('time_offset: src_time {:.3f} maps to unmapped region (time_to=-1), skipping'.format(src_time))
+            return
 
         time_in_tgtna = tgt_insertion_time
         
