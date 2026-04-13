@@ -89,7 +89,7 @@ class lowlvl:
         self.mode = mode
 
         start = src_na['onset_sec'][0]
-        end = src_na['onset_sec'][-1]+ src_na['onset_sec'][-1]
+        end = src_na['onset_sec'][-1]+ src_na['duration_sec'][-1]
         self.time_from = np.linspace(start, end, int(math.ceil(end)-math.ceil(start))*40) #not sure of resolution..
         if self.mode == 'runthrough':
             self.time_to = self.time_from.copy()
