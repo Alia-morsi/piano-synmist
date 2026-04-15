@@ -194,7 +194,10 @@ class lowlvl:
 
             if not np.all(self.time_to[nearestIdx_new_notes_start:nearestIdx_new_notes_end+1] == -1):
                 #then we need to save the old repeat in the repeats structure:
-                self.repeat_tracker[(self.time_to[nearestIdx_new_notes_start], self.time_to[nearestIdx_new_notes_end])] = (self.time_to[nearestIdx_new_notes_start:nearestIdx_new_notes_end].copy(), self.time_from[nearestIdx_new_notes_start:nearestIdx_new_notes_end].copy())
+                # Use end-1 for the key because the mapping slice [start:end) is exclusive of end,
+                # so time_to[end] may be unmapped (-1). The last mapped point is at end-1.
+                last_mapped_idx = nearestIdx_new_notes_end - 1
+                self.repeat_tracker[(self.time_to[nearestIdx_new_notes_start], self.time_to[last_mapped_idx])] = (self.time_to[nearestIdx_new_notes_start:nearestIdx_new_notes_end].copy(), self.time_from[nearestIdx_new_notes_start:nearestIdx_new_notes_end].copy())
             
             #Offset time_to so it maps to where the notes actually land in tgt_na.
             #Notes were shifted by (-new_notes_start_time + insertion_offset),
