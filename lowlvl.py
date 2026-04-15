@@ -5,7 +5,6 @@ import numpy as np
 import copy
 import pretty_midi
 import os
-import pdb
 
 #MIDI Locations for the labels so that we can decipher what's being output.
 
@@ -450,7 +449,7 @@ class lowlvl:
         #add a time offset with the necessary time window for the new notes after src_time_from's equivalent
         #nearest_Idx represents src_time_from's location
         #window = (notes['onset_sec'][-1] + notes['duration_sec'][-1]) - notes['onset_sec'][0]
-        
+
         #if notes is None:
         notes = self.get_notes_between(src_time_to, src_time_from)
 
@@ -472,6 +471,9 @@ class lowlvl:
             time_to_range = self.time_to[nearestIdx_src_time_to:nearestIdx_src_time_from+1].copy()
             time_from_range = self.time_from[nearestIdx_src_time_to:nearestIdx_src_time_from+1].copy()
 
+            #since these views are by reference.. this is the easiest way
+            view_to_update = self.time_to[nearestIdx_src_time_to:nearestIdx_src_time_from+1]
+            
             #save the initial src indexes to recover their ground truths
             #the key should be unique, so in theory this shouldn't crash
             #self.repeat_tracker[(tgt_time_to, tgt_time_from)] = (self.time_to[nearestIdx_src_time_to:nearestIdx_src_time_from+1],
@@ -489,6 +491,10 @@ class lowlvl:
 
            time_to_range = time_to_subarray[nearestIdx_src_time_to:nearestIdx_src_time_from+1].copy()
            time_from_range = time_from_subarray[nearestIdx_src_time_to:nearestIdx_src_time_from+1].copy()
+
+           #since these views are by reference.. this is the easiest way
+           view_to_update = time_to_subarray[nearestIdx_src_time_to:nearestIdx_src_time_from+1]
+        
            #save the initial src indexes to recover their ground truths
            #the key should be unique, so in theory this shouldn't crash
            #self.repeat_tracker[(tgt_time_to, tgt_time_from)] = (time_to_subarray[nearestIdx_src_time_to:nearestIdx_src_time_from+1],
@@ -501,6 +507,13 @@ class lowlvl:
         tgt_time_to_apply_offset = tgt_time_from
         self._apply_warping_path_offsets(tgt_time_to_apply_offset, src_time_from - src_time_to) #we use src because we are offsetting to place the new repeat..
         self.repeat_tracker[(tgt_time_to, tgt_time_from)] = (time_to_range, time_from_range)
+        #change the grid so that src_time_to (where we want to return to) now points to our new
+        #starting point (which is src_time_from)
+
+        #the offset is tgt_time_from - tgt_time_to
+        #nearestIdx_src_time_to:nearestIdx_src_time_from+1
+        view_to_update[0:-1] += (tgt_time_from - tgt_time_to)
+        
         #self.time_to[nearestIdx_src_time_to:] += (tgt_time_from - tgt_time_to)
         #we apply the warping path offset at the tgt_time_to_apply_offset ( nearestIdx_src_time_to) skip the old execution, so we offset by the time difference between tgt_time_from and tgt_time_to. Previously we had the offset as src_time_to(the earlier point)  and src_time_from (the later point). This would hold if the notes array is exactly the source notes with no modifications or delays or anything. what happens to the labels in that case? they should be aligned with tgt_na they should accomodate for the same shift applied. and in theory this has already been done earlier in the function
 
@@ -510,8 +523,7 @@ class lowlvl:
         self._shift_labels(src_time_from, (src_time_from - src_time_to), repeat_index)
         self._label_note(time_in_tgtna, time_in_tgtna + (src_time_from - src_time_to), "time_shift", midlvl_label)
 
-        #change the grid so that src_time_to (where we want to return to) now points to our new
-        #starting point (which is src_time_from)
+          
         #append the notes at the correct time and sort
         for note in notes:
             note['onset_sec'] += time_in_tgtna
