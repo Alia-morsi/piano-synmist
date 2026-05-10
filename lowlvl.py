@@ -521,7 +521,7 @@ class lowlvl:
         self.tgt_na['onset_sec'][mask] += (src_time_from - src_time_to)
 
         self._shift_labels(src_time_from, (src_time_from - src_time_to), repeat_index)
-        self._label_note(time_in_tgtna, time_in_tgtna + (src_time_from - src_time_to), "time_shift", midlvl_label)
+        self._label_note(time_in_tgtna, time_in_tgtna + (src_time_from - src_time_to), "go_back", midlvl_label)
 
           
         #append the notes at the correct time and sort
